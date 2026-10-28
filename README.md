@@ -1,47 +1,60 @@
-# Sistema de stock para almacén (demo)
+# Sistema para almacén (demo)
 
-Versión de prueba de un sistema de control de stock: productos, ingreso de mercadería por lotes con vencimiento, ventas con descuento automático de stock, avisos e informe diario.
+Demo de un sistema de gestión para almacén de barrio: ventas con lector de código de barras, caja con cierre y arqueo, fiado con estado de cuenta, stock por lotes con vencimientos e informes.
 
-Es una página estática (HTML, CSS y JavaScript sin dependencias), así que se puede publicar directo en GitHub Pages.
+Es una página estática (HTML, CSS y JavaScript sin dependencias), lista para GitHub Pages.
 
-## Qué se puede probar
+## Qué incluye
 
-- **Inicio:** caja del día y avisos de vencidos, por vencer y poco stock. Los días de anticipación del aviso se pueden cambiar.
-- **Vender:** buscar productos, agregarlos al ticket (por unidad o por gramos) y confirmar. El stock se descuenta del lote que vence primero y no se venden lotes vencidos.
-- **Productos:** alta y edición. El precio de venta se calcula con el costo y el porcentaje; si se edita a mano, se recalcula el porcentaje. Permite cargar stock inicial y dar de baja.
-- **Ingresar mercadería:** cada línea crea un lote. Si el costo cambió, ofrece actualizar el precio manteniendo el porcentaje.
-- **Informe de ventas:** cantidad de ventas, total, costo, ganancia y detalle por producto, para cualquier día.
+| Pantalla | Qué hace |
+|---|---|
+| **Inicio** | Estado de la caja y los avisos: vencidos (con botón para sacarlos del stock), por vencer, poco stock y fiado a cobrar. |
+| **Vender** (F1) | Escanear o buscar productos, armar el ticket y cobrar (F8) con efectivo (calcula el vuelto), débito, crédito, transferencia o fiado. Aplica el precio por mayor solo. Descuenta stock por FEFO y no vende vencidos. |
+| **Clientes** (F2) | Fiado: saldo de cada cliente, estado de cuenta, cobros, límite de crédito y envío de la cuenta por WhatsApp. |
+| **Productos** (F3) | Alta y edición con categoría, precio por mayor y la opción de no controlar stock (recargas, servicios). Administración de categorías e importación desde planilla CSV. |
+| **Mercadería** (F4) | Ingreso de lotes con vencimiento, con opción de registrar el pago al proveedor desde la caja. Inventario valorizado, ajustes de stock e historial de movimientos de cada producto. |
+| **Caja** (F6) | Apertura con dinero inicial, entradas y salidas de efectivo, cierre con arqueo (debería haber contra lo que se contó) e historial de cierres imprimibles. |
+| **Informes** (F7) | Ventas por período: totales, ganancia, ticket promedio, por medio de pago, por categoría y por producto. |
 
-La demo arranca con datos de ejemplo cuyas fechas se calculan a partir del día en que se abre, así siempre hay avisos para ver. Desde «Datos de la demo» se puede volver a los datos de ejemplo o empezar vacío.
+La demo arranca con datos de ejemplo cuyas fechas se calculan desde el día en que se abre. Desde «Datos de la demo» se puede volver a ellos o empezar vacío.
 
 ## Publicar en GitHub Pages
 
-1. Crear un repositorio nuevo en GitHub (por ejemplo, `stock-almacen`).
-2. Subir todo el contenido de esta carpeta a la raíz del repositorio (con «Add file → Upload files» o con git).
-3. En el repositorio, ir a **Settings → Pages**.
-4. En **Build and deployment**, elegir **Deploy from a branch**, la rama `main` y la carpeta `/ (root)`. Guardar.
-5. Esperar uno o dos minutos. La página queda en `https://TU-USUARIO.github.io/stock-almacen/`.
+1. Subir todo el contenido de esta carpeta a la raíz del repositorio, respetando las carpetas `css`, `js`, `js/vistas` y `docs`.
+2. En **Settings → Pages**, elegir **Deploy from a branch**, la rama `main` y la carpeta `/ (root)`.
+3. Esperar el tilde verde en la pestaña **Actions**. La página queda en `https://TU-USUARIO.github.io/NOMBRE-DEL-REPO/`.
 
-Para probarla en la computadora sin publicarla, alcanza con abrir `index.html` en el navegador.
+Cada vez que se cambie un CSS o JS, hay que subir el número `?v=` en `index.html` para que los navegadores no usen la versión guardada.
 
 ## Estructura
 
 ```
-index.html        Estructura de la página
-css/estilos.css   Estilos (incluye modo oscuro y versión para celular)
-js/db.js          Capa de datos: simula las tablas y las guarda en el navegador
-js/logica.js      Reglas de negocio: precios, lotes, FEFO, avisos, informe
-js/app.js         Pantallas y eventos
+index.html              Estructura y menú
+css/estilos.css         Estilos (modo oscuro, celular e impresión)
+js/db.js                Capa de datos: las tablas, guardadas en el navegador
+js/logica.js            Reglas de negocio: caja, fiado, FEFO, precios, informes, importación
+js/ui.js                Piezas compartidas de la interfaz
+js/vistas/*.js          Una pantalla por archivo
+js/app.js               Arranque, atajos de teclado y menú del celular
+docs/modelo.sql         Modelo de base de datos para la versión con servidor
 ```
 
-Las tablas de `db.js` son las mismas del modelo de datos: `productos`, `lotes`, `ventas`, `detalle_venta`, `detalle_venta_lote` y `ajustes_stock` (esta última queda preparada para la versión completa).
+## Modelo de datos
+
+Once tablas, descritas en `docs/modelo.sql`:
+
+- **Catálogo:** `categorias`, `productos`.
+- **Stock:** `lotes` (cada ingreso, con su vencimiento) y `ajustes_stock` (lo que sale sin venderse).
+- **Fiado:** `clientes` y `pagos_clientes`. El saldo no se guarda: se calcula con las compras fiadas menos los pagos.
+- **Caja:** `cajas` (cada turno, con su arqueo) y `movimientos_caja` (entradas y salidas de efectivo).
+- **Ventas:** `ventas` (con medio de pago, caja y cliente), `detalle_venta` (renglones con el precio y costo del momento) y `detalle_venta_lote` (de qué lote salió cada cosa).
 
 ## Limitaciones de la demo
 
-- **Los datos viven en el navegador (localStorage).** Cada persona y cada dispositivo ven sus propios datos, y se pierden si se borra el historial del navegador. No sirve para uso real del almacén.
-- **No hay usuarios ni contraseñas.**
-- **Montos en pesos enteros.** El precio de los productos por peso es por kilo y el stock se cuenta en gramos.
+- Los datos viven en el navegador: cada dispositivo tiene los suyos y se pierden si se borra el historial.
+- No hay usuarios ni contraseñas, ni anulación de ventas.
+- Quedan para más adelante los kits o combos y las promociones.
 
-## Pasar a la versión completa
+## Pasar a la versión con servidor
 
-Para usarlo de verdad hace falta un backend con base de datos (por ejemplo, ASP.NET con Entity Framework y SQL Server o PostgreSQL). La idea es que `logica.js` se traslade al servidor y `db.js` se reemplace por llamadas a la API: las pantallas de `app.js` casi no cambian.
+`logica.js` se traslada al backend (por ejemplo, ASP.NET con Entity Framework) y `db.js` se reemplaza por llamadas a la API. Las pantallas casi no cambian.

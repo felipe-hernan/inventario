@@ -1,12 +1,17 @@
 /*
  * Capa de datos de la demo.
  * Simula las tablas de la base de datos y las guarda en el navegador (localStorage).
- * Cuando el sistema pase a tener un backend real, este es el único archivo
- * que hay que reemplazar por llamadas a la API: logica.js y app.js no cambian.
+ * Cuando el sistema tenga un backend real, este es el archivo que se reemplaza
+ * por llamadas a la API. Ver docs/modelo.sql para la estructura de cada tabla.
  */
 const DB = {
-  CLAVE: 'sistema-stock-demo-v1',
-  TABLAS: ['productos', 'lotes', 'ventas', 'detalle_venta', 'detalle_venta_lote', 'ajustes_stock'],
+  CLAVE: 'sistema-stock-demo-v2',
+  TABLAS: [
+    'categorias', 'productos', 'lotes', 'ajustes_stock',
+    'clientes', 'pagos_clientes',
+    'cajas', 'movimientos_caja',
+    'ventas', 'detalle_venta', 'detalle_venta_lote'
+  ],
   data: null,
 
   vacio() {
@@ -17,6 +22,7 @@ const DB = {
 
   cargar() {
     try {
+      localStorage.removeItem('sistema-stock-demo-v1'); // datos de la versión anterior de la demo
       const guardado = localStorage.getItem(this.CLAVE);
       this.data = guardado ? JSON.parse(guardado) : null;
     } catch (e) {
@@ -31,7 +37,7 @@ const DB = {
     try {
       localStorage.setItem(this.CLAVE, JSON.stringify(this.data));
     } catch (e) {
-      // Sin localStorage (modo privado estricto): la demo sigue funcionando en memoria.
+      // Sin localStorage la demo sigue funcionando en memoria.
     }
   },
 
@@ -56,7 +62,11 @@ const DB = {
     return nueva;
   },
 
-  // Ejecuta varios cambios como una sola operación: si algo falla, se deshace todo.
+  borrar(tabla, id) {
+    this.data[tabla] = this.data[tabla].filter(f => f.id !== id);
+  },
+
+  // Varios cambios como una sola operación: si algo falla, se deshace todo.
   transaccion(fn) {
     const copia = JSON.stringify(this.data);
     try {

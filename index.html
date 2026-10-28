@@ -4,11 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Stock del almacén (demo)</title>
-  <meta name="description" content="Demo de un sistema de control de stock para almacén: productos, lotes con vencimiento, ventas, avisos e informe diario.">
+  <meta name="description" content="Demo de un sistema para almacén: ventas, caja, fiado, stock con vencimientos e informes.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/estilos.css">
+  <link rel="stylesheet" href="css/estilos.css?v=6">
 </head>
 <body>
   <div class="app">
@@ -21,45 +21,41 @@
         <span></span><span></span><span></span>
       </button>
       <div class="barra-contenido" id="barra-contenido">
-      <nav aria-label="Secciones">
-        <ul class="menu">
-          <li><a href="#inicio" data-vista="inicio">Inicio</a></li>
-          <li><a href="#vender" data-vista="vender">Vender</a></li>
-          <li><a href="#productos" data-vista="productos">Productos</a></li>
-          <li><a href="#ingreso" data-vista="ingreso">Ingresar mercadería</a></li>
-          <li><a href="#informe" data-vista="informe">Informe de ventas</a></li>
-        </ul>
-      </nav>
-      <div class="nota-demo">
-        <p>Versión de prueba. Los datos se guardan solo en este navegador.</p>
-        <button type="button" class="boton-barra" data-accion="datos-abrir">Datos de la demo</button>
-      </div>
+        <div id="estado-caja"></div>
+        <nav aria-label="Secciones">
+          <ul class="menu">
+            <li><a href="#inicio" data-vista="inicio">Inicio</a></li>
+            <li><a href="#vender" data-vista="vender">Vender <kbd>F1</kbd></a></li>
+            <li><a href="#clientes" data-vista="clientes">Clientes <kbd>F2</kbd></a></li>
+            <li><a href="#productos" data-vista="productos">Productos <kbd>F3</kbd></a></li>
+            <li><a href="#mercaderia" data-vista="mercaderia">Mercadería <kbd>F4</kbd></a></li>
+            <li><a href="#caja" data-vista="caja">Caja <kbd>F6</kbd></a></li>
+            <li><a href="#informes" data-vista="informes">Informes <kbd>F7</kbd></a></li>
+          </ul>
+        </nav>
+        <div class="nota-demo">
+          <p>Versión de prueba. Los datos se guardan solo en este navegador.</p>
+          <button type="button" class="boton-barra" data-accion="datos-abrir">Datos de la demo</button>
+        </div>
       </div>
     </header>
 
     <main id="vista" tabindex="-1"></main>
   </div>
 
-  <dialog id="dlg-producto" aria-labelledby="dlg-producto-titulo"></dialog>
-
-  <dialog id="dlg-datos" aria-labelledby="dlg-datos-titulo">
-    <div class="dlg-cuerpo">
-      <div class="dlg-cabecera">
-        <h2 id="dlg-datos-titulo">Datos de la demo</h2>
-        <button type="button" class="boton-icono" data-accion="dlg-cerrar" aria-label="Cerrar">×</button>
-      </div>
-      <p>Todo lo que cargues queda guardado en este navegador, en esta computadora o celular. Otra persona que abra la demo ve sus propios datos.</p>
-      <div class="pila">
-        <button type="button" class="boton boton-sec" data-accion="datos-ejemplo">Volver a los datos de ejemplo</button>
-        <button type="button" class="boton boton-sec" data-accion="datos-vacio">Empezar sin datos</button>
-      </div>
-    </div>
-  </dialog>
-
+  <dialog id="dlg" aria-labelledby="dlg-titulo"></dialog>
   <div id="aviso-flotante" role="status" aria-live="polite"></div>
 
-  <script src="js/db.js"></script>
-  <script src="js/logica.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/db.js?v=6"></script>
+  <script src="js/logica.js?v=6"></script>
+  <script src="js/ui.js?v=6"></script>
+  <script src="js/vistas/inicio.js?v=6"></script>
+  <script src="js/vistas/vender.js?v=6"></script>
+  <script src="js/vistas/clientes.js?v=6"></script>
+  <script src="js/vistas/productos.js?v=6"></script>
+  <script src="js/vistas/mercaderia.js?v=6"></script>
+  <script src="js/vistas/caja.js?v=6"></script>
+  <script src="js/vistas/informes.js?v=6"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>
