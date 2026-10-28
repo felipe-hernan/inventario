@@ -8,6 +8,12 @@
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const num = v => (v === '' || v == null ? NaN : Number(v));
   const vista = () => $('#vista');
+  const esTactil = window.matchMedia('(pointer: coarse)').matches;
+  const enfocar = (el, seleccionar = false) => {
+    if (!el || esTactil) return;
+    el.focus();
+    if (seleccionar) el.select();
+  };
   const dlgProducto = () => $('#dlg-producto');
 
   const estado = {
@@ -170,8 +176,7 @@
         </section>
         ${ticketHTML()}
       </div>`;
-    const foco = sel ? $('#venta-cantidad') : $('#venta-buscar');
-    if (foco) { foco.focus(); if (sel) foco.select(); }
+    enfocar(sel ? $('#venta-cantidad') : $('#venta-buscar'), !!sel);
   }
 
   function resultadosVenta() {
@@ -370,7 +375,7 @@
         </div>
       </form>`;
     dlgProducto().showModal();
-    $('[name=nombre]', dlgProducto()).focus();
+    enfocar($('[name=nombre]', dlgProducto()));
   }
 
   // ---------- Ingresar mercadería ----------
@@ -437,8 +442,7 @@
         </table></div>` : '<p class="vacio">Todavía no se ingresó mercadería.</p>'}
       </section>`;
 
-    const foco = p ? $('[data-campo=cantidad]') : $('#ingreso-buscar');
-    if (foco) foco.focus();
+    enfocar(p ? $('[data-campo=cantidad]') : $('#ingreso-buscar'));
   }
 
   function avisoCosto(p) {
