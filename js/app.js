@@ -61,7 +61,30 @@
     else location.hash = v;
   }
 
+  // ---------- Menú sándwich (celular) ----------
+  const barra = $('.barra');
+  const botonMenu = $('.boton-menu');
+  function menuAbierto(abrir) {
+    barra.classList.toggle('abierta', abrir);
+    botonMenu.setAttribute('aria-expanded', String(abrir));
+    botonMenu.setAttribute('aria-label', abrir ? 'Cerrar menú' : 'Abrir menú');
+  }
+  botonMenu.addEventListener('click', () => menuAbierto(!barra.classList.contains('abierta')));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && barra.classList.contains('abierta')) {
+      menuAbierto(false);
+      botonMenu.focus();
+    }
+  });
+  document.addEventListener('click', e => {
+    if (barra.classList.contains('abierta') && !barra.contains(e.target)) menuAbierto(false);
+  });
+  barra.addEventListener('click', e => {
+    if (e.target.closest('.menu a, [data-accion=datos-abrir]')) menuAbierto(false);
+  });
+
   window.addEventListener('hashchange', () => {
+    menuAbierto(false);
     render();
     window.scrollTo(0, 0);
     vista().focus({ preventScroll: true });
