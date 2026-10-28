@@ -546,19 +546,7 @@ fieldset.panel-gris legend + * { clear: both; }
 .texto-verde { color: var(--verde); }
 .texto-ambar { color: var(--ambar); }
 .tabla .num.texto-rojo, .tabla .num.texto-verde { font-weight: 700; }
-kbd {
-  font-family: var(--mono);
-  font-size: .6875rem;
-  padding: .0625rem .3125rem;
-  border: 1px solid currentColor;
-  border-radius: 4px;
-  opacity: .7;
-  margin-left: .375rem;
-  vertical-align: middle;
-}
-.tactil kbd { display: none; }
 .menu a { display: flex; justify-content: space-between; align-items: center; }
-.menu kbd { opacity: .5; }
 
 .boton-chico { min-height: 2.125rem; padding: .25rem .75rem; font-size: .875rem; }
 .boton-peligro-lleno { background: var(--rojo); border-color: var(--rojo); color: #fff; }
@@ -692,7 +680,6 @@ a.boton { text-decoration: none; }
 
 @media (max-width: 50rem) {
   .estado-caja { margin: .25rem 1rem .5rem; }
-  .menu kbd { display: none; }
   .caja-esperado strong { font-size: 1.75rem; }
   .fechas { width: 100%; }
   .fechas .campo { flex: 1; }

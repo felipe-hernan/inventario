@@ -1,5 +1,5 @@
 /*
- * Arranque de la demo: eventos globales, menú del celular y atajos de teclado.
+ * Arranque de la demo: eventos globales y menú del celular.
  */
 (function () {
   // ---------- Eventos delegados ----------
@@ -31,19 +31,6 @@
   });
   // Cerrar el diálogo tocando afuera
   $('#dlg').addEventListener('click', e => { if (e.target.id === 'dlg') UI.cerrarDialogo(); });
-
-  // ---------- Atajos de teclado (como el sistema que usa el cliente) ----------
-  const ATAJOS = { F1: 'vender', F2: 'clientes', F3: 'productos', F4: 'mercaderia', F6: 'caja', F7: 'informes' };
-  document.addEventListener('keydown', e => {
-    if (ATAJOS[e.key]) {
-      e.preventDefault();
-      if ($('#dlg').open) UI.cerrarDialogo();
-      UI.navegar(ATAJOS[e.key]);
-    } else if (e.key === 'F8' && UI.vistaActual() === 'vender' && !$('#dlg').open) {
-      e.preventDefault();
-      App.acciones['venta-cobrar']();
-    }
-  });
 
   // ---------- Menú sándwich (celular) ----------
   const barra = $('.barra');
@@ -94,9 +81,6 @@
     location.hash = 'inicio';
     location.reload();
   };
-
-  // Mostrar los atajos solo en pantallas con teclado
-  if (UI.esTactil) document.documentElement.classList.add('tactil');
 
   DB.cargar();
   UI.render();

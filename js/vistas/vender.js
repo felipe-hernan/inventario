@@ -113,7 +113,7 @@
         <p class="ticket-fecha">${Formato.fecha(ahora)} ${Formato.hora(ahora)}</p>
         ${filas.length ? `<ul class="renglones">${filas.join('')}</ul>` : '<p class="ticket-vacio">Todavía no agregaste productos.</p>'}
         <p class="ticket-total"><span>Total</span><strong>${Formato.plata(totalCarrito())}</strong></p>
-        <button type="button" class="boton boton-grande boton-ancho" data-accion="venta-cobrar" ${filas.length ? '' : 'disabled'}>Cobrar <kbd>F8</kbd></button>
+        <button type="button" class="boton boton-grande boton-ancho" data-accion="venta-cobrar" ${filas.length ? '' : 'disabled'}>Cobrar</button>
         ${filas.length ? '<button type="button" class="boton-texto boton-ancho" data-accion="venta-vaciar">Vaciar ticket</button>' : ''}
       </div>
     </aside>`;

@@ -49,7 +49,7 @@
             <div><dt>Ganancia</dt><dd>${Formato.plata(hoy.ganancia)}</dd></div>
             <div><dt>Efectivo en caja</dt><dd>${Formato.plata(Logica.resumenCaja(caja).efectivoEsperado)}</dd></div>
           </dl>
-          <a class="boton boton-grande" href="#vender">Nueva venta <kbd>F1</kbd></a>`
+          <a class="boton boton-grande" href="#vender">Nueva venta</a>`
         : `<p class="ayuda">Abrila con el efectivo que tenés para empezar a vender.</p>
           <button type="button" class="boton boton-grande" data-accion="caja-abrir-dialogo">Abrir caja</button>`}
       </section>

@@ -9,12 +9,12 @@ Es una página estática (HTML, CSS y JavaScript sin dependencias), lista para G
 | Pantalla | Qué hace |
 |---|---|
 | **Inicio** | Estado de la caja y los avisos: vencidos (con botón para sacarlos del stock), por vencer, poco stock y fiado a cobrar. |
-| **Vender** (F1) | Escanear o buscar productos, armar el ticket y cobrar (F8) con efectivo (calcula el vuelto), débito, crédito, transferencia o fiado. Aplica el precio por mayor solo. Descuenta stock por FEFO y no vende vencidos. |
-| **Clientes** (F2) | Fiado: saldo de cada cliente, estado de cuenta, cobros, límite de crédito y envío de la cuenta por WhatsApp. |
-| **Productos** (F3) | Alta y edición con categoría, precio por mayor y la opción de no controlar stock (recargas, servicios). Administración de categorías e importación desde planilla CSV. |
-| **Mercadería** (F4) | Ingreso de lotes con vencimiento, con opción de registrar el pago al proveedor desde la caja. Inventario valorizado, ajustes de stock e historial de movimientos de cada producto. |
-| **Caja** (F6) | Apertura con dinero inicial, entradas y salidas de efectivo, cierre con arqueo (debería haber contra lo que se contó) e historial de cierres imprimibles. |
-| **Informes** (F7) | Ventas por período: totales, ganancia, ticket promedio, por medio de pago, por categoría y por producto. |
+| **Vender** | Escanear o buscar productos, armar el ticket y cobrar con efectivo (calcula el vuelto), débito, crédito, transferencia o fiado. Aplica el precio por mayor solo. Descuenta stock por FEFO y no vende vencidos. |
+| **Clientes** | Fiado: saldo de cada cliente, estado de cuenta, cobros, límite de crédito y envío de la cuenta por WhatsApp. |
+| **Productos** | Alta y edición con categoría, precio por mayor y la opción de no controlar stock (recargas, servicios). Administración de categorías e importación desde planilla CSV. |
+| **Mercadería** | Ingreso de lotes con vencimiento, con opción de registrar el pago al proveedor desde la caja. Inventario valorizado, ajustes de stock e historial de movimientos de cada producto. |
+| **Caja** | Apertura con dinero inicial, entradas y salidas de efectivo, cierre con arqueo (debería haber contra lo que se contó) e historial de cierres imprimibles. |
+| **Informes** | Ventas por período: totales, ganancia, ticket promedio, por medio de pago, por categoría y por producto. |
 
 La demo arranca con datos de ejemplo cuyas fechas se calculan desde el día en que se abre. Desde «Datos de la demo» se puede volver a ellos o empezar vacío.
 
@@ -35,7 +35,7 @@ js/db.js                Capa de datos: las tablas, guardadas en el navegador
 js/logica.js            Reglas de negocio: caja, fiado, FEFO, precios, informes, importación
 js/ui.js                Piezas compartidas de la interfaz
 js/vistas/*.js          Una pantalla por archivo
-js/app.js               Arranque, atajos de teclado y menú del celular
+js/app.js               Arranque y menú del celular
 docs/modelo.sql         Modelo de base de datos para la versión con servidor
 ```
 
