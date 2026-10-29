@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/estilos.css?v=8">
+  <link rel="stylesheet" href="css/estilos.css?v=10">
 </head>
 <body>
   <div class="app">
@@ -42,8 +42,10 @@
             <li><a href="#mercaderia" data-vista="mercaderia">Mercadería</a></li>
             <li><a href="#caja" data-vista="caja">Caja</a></li>
             <li><a href="#informes" data-vista="informes">Informes</a></li>
+            <li><a href="#usuarios" data-vista="usuarios">Usuarios</a></li>
           </ul>
         </nav>
+        <div id="usuario-actual"></div>
         <div class="nota-demo">
           <p>Versión de prueba. Los datos se guardan solo en este navegador.</p>
           <button type="button" class="boton-barra" data-accion="datos-abrir">Datos de la demo</button>
@@ -57,16 +59,18 @@
   <dialog id="dlg" aria-labelledby="dlg-titulo"></dialog>
   <div id="aviso-flotante" role="status" aria-live="polite"></div>
 
-  <script src="js/db.js?v=8"></script>
-  <script src="js/logica.js?v=8"></script>
-  <script src="js/ui.js?v=8"></script>
-  <script src="js/vistas/inicio.js?v=8"></script>
-  <script src="js/vistas/vender.js?v=8"></script>
-  <script src="js/vistas/clientes.js?v=8"></script>
-  <script src="js/vistas/productos.js?v=8"></script>
-  <script src="js/vistas/mercaderia.js?v=8"></script>
-  <script src="js/vistas/caja.js?v=8"></script>
-  <script src="js/vistas/informes.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="js/db.js?v=10"></script>
+  <script src="js/logica.js?v=10"></script>
+  <script src="js/ui.js?v=10"></script>
+  <script src="js/vistas/login.js?v=10"></script>
+  <script src="js/vistas/usuarios.js?v=10"></script>
+  <script src="js/vistas/inicio.js?v=10"></script>
+  <script src="js/vistas/vender.js?v=10"></script>
+  <script src="js/vistas/clientes.js?v=10"></script>
+  <script src="js/vistas/productos.js?v=10"></script>
+  <script src="js/vistas/mercaderia.js?v=10"></script>
+  <script src="js/vistas/caja.js?v=10"></script>
+  <script src="js/vistas/informes.js?v=10"></script>
+  <script src="js/app.js?v=10"></script>
 </body>
 </html>

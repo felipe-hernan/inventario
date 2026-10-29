@@ -18,6 +18,26 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 const num = v => (v === '' || v == null ? NaN : Number(v));
 const enteroONulo = v => (String(v ?? '').trim() === '' ? null : Number(v));
 
+// Sesión del usuario. En la demo se guarda en el navegador; con servidor sería un token o una cookie.
+const Sesion = {
+  CLAVE: 'sistema-stock-sesion',
+  usuario() {
+    let id = null;
+    try { id = Number(localStorage.getItem(Sesion.CLAVE)) || null; } catch (e) { id = Sesion._memoria; }
+    const u = id ? DB.buscar('usuarios', id) : null;
+    return u && u.activo ? u : null;
+  },
+  iniciar(u) {
+    Sesion._memoria = u.id;
+    try { localStorage.setItem(Sesion.CLAVE, String(u.id)); } catch (e) { /* sin localStorage */ }
+  },
+  cerrar() {
+    Sesion._memoria = null;
+    try { localStorage.removeItem(Sesion.CLAVE); } catch (e) { /* sin localStorage */ }
+  },
+  _memoria: null
+};
+
 const UI = {
   esTactil: window.matchMedia('(pointer: coarse)').matches,
 
@@ -28,8 +48,23 @@ const UI = {
     return App.vistas[v] ? v : 'inicio';
   },
 
+  usuario: null,
+  esAdmin() { return !!UI.usuario && UI.usuario.rol === 'admin'; },
+  puedeVer(vista) { return !!UI.usuario && PERMISOS[UI.usuario.rol].includes(vista); },
+
   render() {
-    const v = UI.vistaActual();
+    UI.usuario = Sesion.usuario();
+    Logica.usuarioActualId = UI.usuario ? UI.usuario.id : null;
+    document.body.classList.toggle('sin-sesion', !UI.usuario);
+    if (!UI.usuario) { App.vistas.login(); return; }
+
+    let v = UI.vistaActual();
+    if (!UI.puedeVer(v)) {
+      v = 'inicio';
+      history.replaceState(null, '', '#inicio');
+    }
+    $$('.menu [data-vista]').forEach(a => { a.closest('li').hidden = !UI.puedeVer(a.dataset.vista); });
+    UI.renderUsuario();
     $$('[data-vista]').forEach(a => {
       if (a.dataset.vista === v) a.setAttribute('aria-current', 'page');
       else a.removeAttribute('aria-current');
@@ -117,6 +152,22 @@ const UI = {
     return `${conTodas ? '<option value="">Todas las categorías</option>' : '<option value="">Sin categoría</option>'}
       ${Logica.categorias().map(c => `<option value="${c.id}" ${c.id === seleccionada ? 'selected' : ''}>${esc(c.nombre)}</option>`).join('')}
       ${conNueva ? '<option value="__nueva">+ Nueva categoría…</option>' : ''}`;
+  },
+
+  // Barra lateral: quién está usando el sistema.
+  renderUsuario() {
+    const el = $('#usuario-actual');
+    if (!el) return;
+    const u = UI.usuario;
+    el.innerHTML = `<div class="usuario-actual">
+      <button type="button" class="usuario-boton" data-accion="mi-cuenta" aria-label="Mi cuenta: ${esc(u.nombre)}">
+        <span class="avatar" aria-hidden="true">${esc(u.nombre.charAt(0).toUpperCase())}</span>
+        <span class="usuario-texto"><strong>${esc(u.nombre)}</strong><span>${ROLES[u.rol]}</span></span>
+      </button>
+      <button type="button" class="boton-barra" data-accion="sesion-salir">Salir</button>
+    </div>`;
+    const datos = $('.nota-demo');
+    if (datos) datos.hidden = !UI.esAdmin();
   },
 
   // Barra lateral: muestra si la caja está abierta.

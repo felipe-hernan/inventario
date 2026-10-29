@@ -5,8 +5,9 @@
  * por llamadas a la API. Ver docs/modelo.sql para la estructura de cada tabla.
  */
 const DB = {
-  CLAVE: 'sistema-stock-demo-v2',
+  CLAVE: 'sistema-stock-demo-v3',
   TABLAS: [
+    'usuarios',
     'categorias', 'productos', 'lotes', 'ajustes_stock',
     'clientes', 'pagos_clientes',
     'cajas', 'movimientos_caja',
@@ -22,7 +23,9 @@ const DB = {
 
   cargar() {
     try {
-      localStorage.removeItem('sistema-stock-demo-v1'); // datos de la versión anterior de la demo
+      // Datos de versiones anteriores de la demo, con otra estructura
+      localStorage.removeItem('sistema-stock-demo-v1');
+      localStorage.removeItem('sistema-stock-demo-v2');
       const guardado = localStorage.getItem(this.CLAVE);
       this.data = guardado ? JSON.parse(guardado) : null;
     } catch (e) {
@@ -41,8 +44,11 @@ const DB = {
     }
   },
 
-  reiniciar(conEjemplo) {
+  reiniciar(conEjemplo, conservarUsuarios = false) {
+    const usuarios = conservarUsuarios && this.data ? this.data.usuarios : null;
+    const secuencia = conservarUsuarios && this.data ? this.data.secuencias.usuarios : 0;
     this.data = this.vacio();
+    if (usuarios) { this.data.usuarios = usuarios; this.data.secuencias.usuarios = secuencia; }
     if (conEjemplo && typeof cargarEjemplo === 'function') cargarEjemplo();
     this.guardar();
   },

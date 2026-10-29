@@ -19,7 +19,7 @@
           <tbody>${cerradas.slice(0, 30).map(c => {
             const r = Logica.resumenCaja(c);
             return `<tr>
-              <td>${Formato.fecha(c.fecha_apertura)}<span class="sub">${Formato.hora(c.fecha_apertura)} a ${Formato.hora(c.fecha_cierre)}</span></td>
+              <td>${Formato.fecha(c.fecha_apertura)}<span class="sub">${Formato.hora(c.fecha_apertura)} a ${Formato.hora(c.fecha_cierre)}${c.usuario_cierre_id ? `, cerró ${esc(Logica.nombreUsuario(c.usuario_cierre_id))}` : ''}</span></td>
               <td class="num">${Formato.plata(r.total)}</td>
               <td class="num">${Formato.plata(c.efectivo_esperado)}</td>
               <td class="num">${Formato.plata(c.efectivo_contado)}</td>
@@ -62,7 +62,7 @@
           <ul class="cuentas">
             ${r.porMedio.map(m => `<li><span>${m.medio.nombre}${m.cantidad ? ` <span class="sub-inline">(${m.cantidad})</span>` : ''}</span><span>${Formato.plata(m.total)}</span></li>`).join('')}
             <li class="cuentas-total"><span>Total vendido</span><span>${Formato.plata(r.total)}</span></li>
-            <li><span>Ganancia</span><span>${Formato.plata(r.ganancia)}</span></li>
+            ${UI.esAdmin() ? `<li><span>Ganancia</span><span>${Formato.plata(r.ganancia)}</span></li>` : ''}
             ${r.cobrosTotal ? `<li><span>Cobros de fiado (todos los medios)</span><span>${Formato.plata(r.cobrosTotal)}</span></li>` : ''}
           </ul>
         </section>
@@ -87,7 +87,7 @@
     return `
       <section class="caja-cabecera">
         <div>
-          <p class="ayuda">Abierta el ${Formato.fecha(caja.fecha_apertura)} a las ${Formato.hora(caja.fecha_apertura)}</p>
+          <p class="ayuda">Abierta el ${Formato.fecha(caja.fecha_apertura)} a las ${Formato.hora(caja.fecha_apertura)}${caja.usuario_apertura_id ? ` por ${esc(Logica.nombreUsuario(caja.usuario_apertura_id))}` : ''}</p>
           <p class="caja-esperado"><span>Efectivo que debería haber</span><strong>${Formato.plata(r.efectivoEsperado)}</strong></p>
         </div>
         <div class="fila-botones">
@@ -183,7 +183,7 @@
     const c = DB.buscar('cajas', id);
     UI.abrirDialogo(`
       <div class="dlg-cuerpo">
-        ${UI.cabecera(`Cierre de caja del ${Formato.fecha(c.fecha_apertura)}`, `De ${Formato.hora(c.fecha_apertura)} a ${Formato.hora(c.fecha_cierre)}${c.fecha_cierre.slice(0, 10) !== c.fecha_apertura.slice(0, 10) ? ` del ${Formato.fecha(c.fecha_cierre)}` : ''}`)}
+        ${UI.cabecera(`Cierre de caja del ${Formato.fecha(c.fecha_apertura)}`, `De ${Formato.hora(c.fecha_apertura)} a ${Formato.hora(c.fecha_cierre)}${c.fecha_cierre.slice(0, 10) !== c.fecha_apertura.slice(0, 10) ? ` del ${Formato.fecha(c.fecha_cierre)}` : ''}. Abrió ${esc(Logica.nombreUsuario(c.usuario_apertura_id)) || '—'}, cerró ${esc(Logica.nombreUsuario(c.usuario_cierre_id)) || '—'}.`)}
         ${resumenHTML(Logica.resumenCaja(c))}
         <div class="dlg-pie no-imprimir">
           <span class="espacio"></span>

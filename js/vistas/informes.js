@@ -66,12 +66,13 @@
       <section class="seccion" aria-labelledby="t-ventas">
         <h2 id="t-ventas">Ventas</h2>
         <div class="tabla-envoltura"><table class="tabla">
-          <thead><tr><th scope="col">N.º</th><th scope="col">${unDia ? 'Hora' : 'Fecha'}</th><th scope="col">Detalle</th><th scope="col">Pago</th><th scope="col" class="num">Total</th></tr></thead>
+          <thead><tr><th scope="col">N.º</th><th scope="col">${unDia ? 'Hora' : 'Fecha'}</th><th scope="col">Detalle</th><th scope="col">Pago</th><th scope="col">Atendió</th><th scope="col" class="num">Total</th></tr></thead>
           <tbody>${inf.ventas.slice().reverse().map(v => {
             const cliente = v.cliente_id ? DB.buscar('clientes', v.cliente_id) : null;
             return `<tr><td>${v.id}</td><td>${unDia ? Formato.hora(v.fecha_hora) : Formato.fechaHora(v.fecha_hora)}</td>
               <td>${esc(Logica.detalleTexto(v.id))}</td>
               <td>${Formato.medio(v.medio_pago)}${cliente ? `<span class="sub">${esc(cliente.nombre)}</span>` : ''}</td>
+              <td>${esc(Logica.nombreUsuario(v.usuario_id)) || '—'}</td>
               <td class="num">${Formato.plata(v.total)}</td></tr>`;
           }).join('')}</tbody>
         </table></div>

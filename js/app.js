@@ -93,8 +93,8 @@
     location.reload();
   };
   App.acciones['datos-vacio'] = () => {
-    if (!confirm('Se borra todo y el sistema queda sin productos, clientes ni ventas. ¿Seguir?')) return;
-    DB.reiniciar(false);
+    if (!confirm('Se borra todo y el sistema queda sin productos, clientes ni ventas. Los usuarios se conservan. ¿Seguir?')) return;
+    DB.reiniciar(false, true);
     location.hash = 'inicio';
     location.reload();
   };

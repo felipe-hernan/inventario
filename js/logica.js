@@ -12,6 +12,17 @@ const MEDIOS_PAGO = [
   { id: 'cuenta', nombre: 'Fiado' }
 ];
 
+const ROLES = {
+  admin: 'Administrador',
+  vendedor: 'Vendedor'
+};
+
+// Pantallas que puede abrir cada rol. El administrador ve todo.
+const PERMISOS = {
+  admin: ['inicio', 'vender', 'clientes', 'productos', 'mercaderia', 'caja', 'informes', 'usuarios'],
+  vendedor: ['inicio', 'vender', 'clientes', 'mercaderia', 'caja']
+};
+
 const MOTIVOS_AJUSTE = {
   vencido: 'Vencido',
   roto: 'Roto o en mal estado',
@@ -75,6 +86,21 @@ function normalizar(texto) {
   return String(texto || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
 }
 
+// Hash simple para no guardar la contraseña a la vista en la demo.
+// En la versión con servidor se reemplaza por bcrypt o similar, calculado en el servidor.
+function hashClave(clave, usuario) {
+  const texto = `${normalizar(usuario)}:${clave}:almacen`;
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
+}
+
 function error(mensaje, codigo) {
   const e = new Error(mensaje);
   if (codigo) e.codigo = codigo;
@@ -84,6 +110,59 @@ function error(mensaje, codigo) {
 // ================= Lógica =================
 const Logica = {
   MINIMO_SUGERIDO: { unidad: 5, peso: 500 },
+  usuarioActualId: null, // lo define la sesión; queda guardado en cada operación
+
+  // ---------- Usuarios ----------
+  usuarios() {
+    return DB.todos('usuarios').slice().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+  },
+  nombreUsuario(id) {
+    const u = id ? DB.buscar('usuarios', id) : null;
+    return u ? u.nombre : '';
+  },
+  validarLogin(usuario, clave) {
+    const nombre = normalizar(usuario);
+    const u = DB.todos('usuarios').find(x => x.usuario === nombre);
+    // Mismo mensaje en los dos casos, para no revelar qué usuarios existen.
+    if (!u || u.clave_hash !== hashClave(clave, nombre)) throw error('Usuario o contraseña incorrectos.');
+    if (!u.activo) throw error('Este usuario está desactivado. Consultá con el administrador.');
+    return u;
+  },
+  _validarClave(clave) {
+    if (String(clave || '').length < 6) throw error('La contraseña tiene que tener al menos 6 caracteres.');
+  },
+  guardarUsuario(datos, id = null) {
+    const nombre = (datos.nombre || '').trim();
+    const usuario = normalizar(datos.usuario);
+    if (!nombre) throw error('Ingresá el nombre de la persona.');
+    if (!/^[a-z0-9._-]{3,20}$/.test(usuario)) throw error('El usuario tiene que tener entre 3 y 20 letras o números, sin espacios ni acentos.');
+    if (!ROLES[datos.rol]) throw error('Elegí el rol.');
+    if (DB.todos('usuarios').some(u => u.id !== id && u.usuario === usuario)) throw error(`Ya existe el usuario «${usuario}».`);
+    const existente = id ? DB.buscar('usuarios', id) : null;
+    const activo = datos.activo !== false;
+    if (existente) {
+      const quedaSinAdmin = existente.rol === 'admin' && (datos.rol !== 'admin' || !activo) &&
+        !DB.todos('usuarios').some(u => u.id !== id && u.rol === 'admin' && u.activo);
+      if (quedaSinAdmin) throw error('Tiene que quedar al menos un administrador activo.');
+      if (id === Logica.usuarioActualId && !activo) throw error('No podés desactivar tu propio usuario.');
+    }
+    if (!existente || datos.clave) Logica._validarClave(datos.clave);
+    return DB.transaccion(() => {
+      const fila = { nombre, usuario, rol: datos.rol, activo };
+      if (datos.clave) fila.clave_hash = hashClave(datos.clave, usuario);
+      else if (existente && existente.usuario !== usuario) {
+        throw error('Si cambiás el nombre de usuario, cargá también una contraseña nueva.');
+      }
+      if (existente) return Object.assign(existente, fila);
+      return DB.insertar('usuarios', { ...fila, fecha_alta: Fechas.hoy() });
+    });
+  },
+  cambiarClavePropia(actual, nueva) {
+    const u = DB.buscar('usuarios', Logica.usuarioActualId);
+    if (!u || u.clave_hash !== hashClave(actual, u.usuario)) throw error('La contraseña actual no es correcta.');
+    Logica._validarClave(nueva);
+    return DB.transaccion(() => { u.clave_hash = hashClave(nueva, u.usuario); return u; });
+  },
 
   // ---------- Precios ----------
   factor(p) { return p.tipo_medida === 'peso' ? 1000 : 1; },
@@ -265,7 +344,7 @@ const Logica = {
     if (vence < fechaIngreso) throw error(`La fecha de vencimiento ${Formato.fecha(vence)} ya pasó.`);
     return DB.insertar('lotes', {
       producto_id: p.id, cantidad_inicial: cantidad, cantidad_actual: cantidad,
-      costo, fecha_vencimiento: vence, fecha_ingreso: fechaIngreso
+      costo, fecha_vencimiento: vence, fecha_ingreso: fechaIngreso, usuario_id: Logica.usuarioActualId
     });
   },
 
@@ -304,7 +383,7 @@ const Logica = {
       if (!Number.isInteger(cantidad) || cantidad <= 0) throw error('La cantidad tiene que ser un número entero mayor a 0.');
       if (cantidad > lote.cantidad_actual) throw error(`En ese lote quedan ${Formato.cantidad(p, lote.cantidad_actual)}.`);
       lote.cantidad_actual -= cantidad;
-      return DB.insertar('ajustes_stock', { lote_id: lote.id, cantidad, motivo, fecha });
+      return DB.insertar('ajustes_stock', { lote_id: lote.id, cantidad, motivo, fecha, usuario_id: Logica.usuarioActualId });
     });
   },
 
@@ -320,6 +399,7 @@ const Logica = {
     if (!Number.isInteger(dineroInicial) || dineroInicial < 0) throw error('El dinero inicial tiene que ser 0 o más, sin centavos.');
     return DB.transaccion(() => DB.insertar('cajas', {
       fecha_apertura: fechaHora, fecha_cierre: null, dinero_inicial: dineroInicial,
+      usuario_apertura_id: Logica.usuarioActualId, usuario_cierre_id: null,
       efectivo_esperado: null, efectivo_contado: null, diferencia: null, observacion: '', estado: 'abierta'
     }));
   },
@@ -333,7 +413,8 @@ const Logica = {
       if (monto > hay) throw error(`En la caja debería haber ${Formato.plata(hay)}. No alcanza para sacar ${Formato.plata(monto)}.`);
     }
     return DB.transaccion(() => DB.insertar('movimientos_caja', {
-      caja_id: caja.id, fecha_hora: fechaHora, tipo, motivo, monto, descripcion: String(descripcion).trim()
+      caja_id: caja.id, fecha_hora: fechaHora, tipo, motivo, monto, descripcion: String(descripcion).trim(),
+      usuario_id: Logica.usuarioActualId
     }));
   },
   cerrarCaja(contado, observacion = '', fechaHora = Fechas.ahora()) {
@@ -343,7 +424,8 @@ const Logica = {
     const esperado = Logica.resumenCaja(caja).efectivoEsperado;
     return DB.transaccion(() => Object.assign(caja, {
       fecha_cierre: fechaHora, efectivo_esperado: esperado, efectivo_contado: contado,
-      diferencia: contado - esperado, observacion: String(observacion).trim(), estado: 'cerrada'
+      diferencia: contado - esperado, observacion: String(observacion).trim(), estado: 'cerrada',
+      usuario_cierre_id: Logica.usuarioActualId
     }));
   },
   resumenCaja(caja) {
@@ -417,7 +499,8 @@ const Logica = {
     const saldo = Logica.saldoCliente(clienteId);
     if (monto > saldo) throw error(`${c.nombre} debe ${Formato.plata(saldo)}. No puede pagar más que eso.`);
     return DB.transaccion(() => DB.insertar('pagos_clientes', {
-      cliente_id: clienteId, caja_id: caja.id, fecha_hora: fechaHora, monto, medio_pago, nota: String(nota).trim()
+      cliente_id: clienteId, caja_id: caja.id, fecha_hora: fechaHora, monto, medio_pago, nota: String(nota).trim(),
+      usuario_id: Logica.usuarioActualId
     }));
   },
 
@@ -438,7 +521,7 @@ const Logica = {
 
     return DB.transaccion(() => {
       const venta = DB.insertar('ventas', {
-        caja_id: caja.id, fecha_hora: fechaHora, medio_pago,
+        caja_id: caja.id, usuario_id: Logica.usuarioActualId, fecha_hora: fechaHora, medio_pago,
         cliente_id: cliente ? cliente.id : null, total: 0, ganancia: 0
       });
 
@@ -798,6 +881,10 @@ function cargarEjemplo() {
   const dia = n => Fechas.sumarDias(hoy, n);
   const momento = (n, hora) => `${dia(n)}T${hora}`;
 
+  const admin = DB.insertar('usuarios', { nombre: 'Administrador', usuario: 'admin', clave_hash: hashClave('admin123', 'admin'), rol: 'admin', activo: true, fecha_alta: dia(-60) });
+  const laura = DB.insertar('usuarios', { nombre: 'Laura', usuario: 'laura', clave_hash: hashClave('laura123', 'laura'), rol: 'vendedor', activo: true, fecha_alta: dia(-30) });
+  Logica.usuarioActualId = admin.id;
+
   const cat = {};
   ['Almacén', 'Bebidas', 'Fiambrería', 'Lácteos', 'Panificados', 'Servicios'].forEach(n => { cat[n] = DB.insertar('categorias', { nombre: n }); });
 
@@ -808,7 +895,7 @@ function cargarEjemplo() {
   });
   const lote = (p, cantidad, vence, ingreso) => DB.insertar('lotes', {
     producto_id: p.id, cantidad_inicial: cantidad, cantidad_actual: cantidad,
-    costo: p.costo, fecha_vencimiento: dia(vence), fecha_ingreso: dia(ingreso)
+    costo: p.costo, fecha_vencimiento: dia(vence), fecha_ingreso: dia(ingreso), usuario_id: admin.id
   });
 
   const leche = producto('Leche entera 1 L', '7790001000011', 'Lácteos', 'unidad', 1000, 1300, 6);
@@ -850,7 +937,8 @@ function cargarEjemplo() {
   vender(-5, '09:40', [[leche, 5], [yerba, 3], [fideos, 3], [galletitas, 4]]);
   cerrar(-5);
 
-  // Hace 3 días
+  // Hace 3 días: atiende Laura
+  Logica.usuarioActualId = laura.id;
   Logica.abrirCaja(20000, momento(-3, '08:00'));
   vender(-3, '10:10', [[leche, 4], [pan, 6]]);
   vender(-3, '18:15', [[queso, 500]], 'cuenta', marta);
@@ -858,6 +946,7 @@ function cargarEjemplo() {
   cerrar(-3, 500);
 
   // Ayer
+  Logica.usuarioActualId = admin.id;
   Logica.abrirCaja(20000, momento(-1, '08:00'));
   vender(-1, '11:20', [[yerba, 2], [fideos, 2], [gaseosa, 6]], 'debito');
   vender(-1, '19:05', [[queso, 300], [galletitas, 2]], 'cuenta', raul);
@@ -866,6 +955,8 @@ function cargarEjemplo() {
   // Hoy: la caja queda abierta
   Logica.abrirCaja(20000, momento(0, '08:00'));
   vender(0, '09:30', [[leche, 2], [queso, 300], [recarga, 1]]);
+  Logica.usuarioActualId = laura.id;
   vender(0, '10:05', [[yerba, 1]], 'transferencia');
   Logica.registrarPago(marta.id, { monto: 3000, medio_pago: 'efectivo' }, momento(0, '10:30'));
+  Logica.usuarioActualId = null;
 }

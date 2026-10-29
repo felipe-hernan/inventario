@@ -8,6 +8,8 @@ Es una página estática (HTML, CSS y JavaScript sin dependencias), lista para G
 
 | Pantalla | Qué hace |
 |---|---|
+| **Ingreso** | Login con usuario y contraseña. No hay registro: los usuarios los crea el administrador. Usuarios de prueba: `admin` / `admin123` y `laura` / `laura123`. |
+| **Usuarios** | Solo para el administrador: crear usuarios, asignar rol, cambiar contraseñas y desactivar. Cada uno puede cambiar su propia contraseña desde «Mi cuenta». |
 | **Notificaciones** | Campana en la barra con los avisos: vencidos, por vencer, poco stock, clientes que pasaron su límite de fiado y caja abierta desde un día anterior. Marca cuáles son nuevos y cada aviso lleva a la pantalla donde se resuelve. |
 | **Inicio** | Estado de la caja y los avisos: vencidos (con botón para sacarlos del stock), por vencer, poco stock y fiado a cobrar. |
 | **Vender** | Escanear o buscar productos, armar el ticket y cobrar con efectivo (calcula el vuelto), débito, crédito, transferencia o fiado. Aplica el precio por mayor solo. Descuenta stock por FEFO y no vende vencidos. |
@@ -18,6 +20,15 @@ Es una página estática (HTML, CSS y JavaScript sin dependencias), lista para G
 | **Informes** | Ventas por período: totales, ganancia, ticket promedio, por medio de pago, por categoría y por producto. |
 
 La demo arranca con datos de ejemplo cuyas fechas se calculan desde el día en que se abre. Desde «Datos de la demo» se puede volver a ellos o empezar vacío.
+
+## Roles
+
+- **Administrador:** ve todo el sistema, incluidos productos, informes, ganancias y usuarios.
+- **Vendedor:** vende, cobra fiado, ingresa mercadería y maneja la caja. No ve productos, informes ni ganancias.
+
+Cada venta, apertura y cierre de caja, movimiento de efectivo, cobro, ingreso y ajuste queda registrado con el usuario que lo hizo.
+
+**Importante:** en la demo el login funciona como flujo, pero no es seguridad real, porque todo corre en el navegador. En la versión con servidor, la verificación de la contraseña y los permisos se hacen en el servidor.
 
 ## Publicar en GitHub Pages
 
@@ -42,7 +53,9 @@ docs/modelo.sql         Modelo de base de datos para la versión con servidor
 
 ## Modelo de datos
 
-Once tablas, descritas en `docs/modelo.sql`:
+Doce tablas, descritas en `docs/modelo.sql`:
+
+- **Usuarios:** `usuarios`, con su rol. Las operaciones guardan el `usuario_id` de quien las hizo.
 
 - **Catálogo:** `categorias`, `productos`.
 - **Stock:** `lotes` (cada ingreso, con su vencimiento) y `ajustes_stock` (lo que sale sin venderse).
@@ -53,7 +66,7 @@ Once tablas, descritas en `docs/modelo.sql`:
 ## Limitaciones de la demo
 
 - Los datos viven en el navegador: cada dispositivo tiene los suyos y se pierden si se borra el historial.
-- No hay usuarios ni contraseñas, ni anulación de ventas.
+- El login no es seguro (todo corre en el navegador) y no hay anulación de ventas.
 - Quedan para más adelante los kits o combos y las promociones.
 
 ## Pasar a la versión con servidor

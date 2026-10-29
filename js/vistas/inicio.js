@@ -46,7 +46,7 @@
           <dl class="cifras">
             <div><dt>Ventas de hoy</dt><dd>${hoy.cantidad}</dd></div>
             <div><dt>Vendido</dt><dd>${Formato.plata(hoy.total)}</dd></div>
-            <div><dt>Ganancia</dt><dd>${Formato.plata(hoy.ganancia)}</dd></div>
+            ${UI.esAdmin() ? `<div><dt>Ganancia</dt><dd>${Formato.plata(hoy.ganancia)}</dd></div>` : ''}
             <div><dt>Efectivo en caja</dt><dd>${Formato.plata(Logica.resumenCaja(caja).efectivoEsperado)}</dd></div>
           </dl>
           <a class="boton boton-grande" href="#vender">Nueva venta</a>`

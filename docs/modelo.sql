@@ -1,8 +1,21 @@
 -- =====================================================================
--- Sistema de stock para almacén: modelo de base de datos (versión 2)
+-- Sistema de stock para almacén: modelo de base de datos (versión 3, con usuarios)
 -- Pensado para PostgreSQL. Montos en pesos enteros.
 -- Productos por peso: stock y cantidades en gramos, precios por kilo.
 -- =====================================================================
+
+-- ---------- Usuarios ----------
+
+-- No hay registro público: los usuarios los crea el administrador.
+CREATE TABLE usuarios (
+  id          SERIAL PRIMARY KEY,
+  nombre      VARCHAR(100) NOT NULL,
+  usuario     VARCHAR(20) NOT NULL UNIQUE,           -- en minúsculas, sin espacios
+  clave_hash  VARCHAR(100) NOT NULL,                 -- en el servidor: bcrypt o Argon2, nunca la contraseña
+  rol         VARCHAR(10) NOT NULL CHECK (rol IN ('admin', 'vendedor')),
+  activo      BOOLEAN NOT NULL DEFAULT TRUE,
+  fecha_alta  DATE NOT NULL DEFAULT CURRENT_DATE
+);
 
 -- ---------- Catálogo ----------
 
@@ -39,7 +52,8 @@ CREATE TABLE lotes (
   cantidad_actual    INT NOT NULL CHECK (cantidad_actual >= 0),
   costo              INT NOT NULL CHECK (costo > 0),
   fecha_vencimiento  DATE NOT NULL,
-  fecha_ingreso      DATE NOT NULL DEFAULT CURRENT_DATE
+  fecha_ingreso      DATE NOT NULL DEFAULT CURRENT_DATE,
+  usuario_id         INT REFERENCES usuarios(id)          -- quién cargó la mercadería
 );
 CREATE INDEX ix_lotes_producto ON lotes(producto_id);
 CREATE INDEX ix_lotes_vencimiento ON lotes(fecha_vencimiento);
@@ -50,7 +64,8 @@ CREATE TABLE ajustes_stock (
   lote_id   INT NOT NULL REFERENCES lotes(id) ON DELETE RESTRICT,
   cantidad  INT NOT NULL CHECK (cantidad > 0),
   motivo    VARCHAR(20) NOT NULL CHECK (motivo IN ('vencido', 'roto', 'perdida', 'consumo', 'conteo')),
-  fecha     DATE NOT NULL DEFAULT CURRENT_DATE
+  fecha     DATE NOT NULL DEFAULT CURRENT_DATE,
+  usuario_id INT REFERENCES usuarios(id)
 );
 
 -- ---------- Clientes y fiado ----------
@@ -73,6 +88,8 @@ CREATE TABLE cajas (
   fecha_apertura     TIMESTAMP NOT NULL DEFAULT NOW(),
   fecha_cierre       TIMESTAMP,
   dinero_inicial     INT NOT NULL CHECK (dinero_inicial >= 0),
+  usuario_apertura_id INT REFERENCES usuarios(id),
+  usuario_cierre_id   INT REFERENCES usuarios(id),
   efectivo_esperado  INT,   -- se calcula y se guarda al cerrar
   efectivo_contado   INT,   -- lo que contó el encargado
   diferencia         INT,   -- contado - esperado (negativo = faltante)
@@ -89,7 +106,8 @@ CREATE TABLE movimientos_caja (
   tipo         VARCHAR(10) NOT NULL CHECK (tipo IN ('entrada', 'salida')),
   motivo       VARCHAR(20) NOT NULL CHECK (motivo IN ('cambio', 'otro_ingreso', 'pago_proveedor', 'retiro', 'gasto', 'otra_salida')),
   monto        INT NOT NULL CHECK (monto > 0),
-  descripcion  VARCHAR(200)
+  descripcion  VARCHAR(200),
+  usuario_id   INT REFERENCES usuarios(id)
 );
 
 CREATE TABLE pagos_clientes (
@@ -99,7 +117,8 @@ CREATE TABLE pagos_clientes (
   fecha_hora  TIMESTAMP NOT NULL DEFAULT NOW(),
   monto       INT NOT NULL CHECK (monto > 0),
   medio_pago  VARCHAR(15) NOT NULL CHECK (medio_pago IN ('efectivo', 'debito', 'credito', 'transferencia')),
-  nota        VARCHAR(200)
+  nota        VARCHAR(200),
+  usuario_id  INT REFERENCES usuarios(id)
 );
 
 -- ---------- Ventas ----------
@@ -107,6 +126,7 @@ CREATE TABLE pagos_clientes (
 CREATE TABLE ventas (
   id          SERIAL PRIMARY KEY,
   caja_id     INT NOT NULL REFERENCES cajas(id) ON DELETE RESTRICT,
+  usuario_id  INT REFERENCES usuarios(id),          -- quién atendió
   fecha_hora  TIMESTAMP NOT NULL DEFAULT NOW(),
   medio_pago  VARCHAR(15) NOT NULL CHECK (medio_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'cuenta')),
   cliente_id  INT REFERENCES clientes(id) ON DELETE RESTRICT,
