@@ -8,18 +8,29 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/estilos.css?v=7">
+  <link rel="stylesheet" href="css/estilos.css?v=8">
 </head>
 <body>
   <div class="app">
     <header class="barra">
-      <a class="marca" href="#inicio">
-        <span class="marca-nombre">Almacén</span>
-        <span class="marca-sub">Control de stock</span>
-      </a>
-      <button type="button" class="boton-menu" aria-expanded="false" aria-controls="barra-contenido" aria-label="Abrir menú">
-        <span></span><span></span><span></span>
-      </button>
+      <div class="barra-arriba">
+        <a class="marca" href="#inicio">
+          <span class="marca-nombre">Almacén</span>
+          <span class="marca-sub">Control de stock</span>
+        </a>
+        <div class="barra-iconos">
+          <button type="button" class="boton-notif" aria-expanded="false" aria-controls="panel-notif" aria-label="Notificaciones">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>
+            </svg>
+            <span class="insignia" hidden></span>
+          </button>
+          <button type="button" class="boton-menu" aria-expanded="false" aria-controls="barra-contenido" aria-label="Abrir menú">
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </div>
+      <section class="panel-notif" id="panel-notif" aria-label="Notificaciones" hidden></section>
       <div class="barra-contenido" id="barra-contenido">
         <div id="estado-caja"></div>
         <nav aria-label="Secciones">
@@ -46,16 +57,16 @@
   <dialog id="dlg" aria-labelledby="dlg-titulo"></dialog>
   <div id="aviso-flotante" role="status" aria-live="polite"></div>
 
-  <script src="js/db.js?v=7"></script>
-  <script src="js/logica.js?v=7"></script>
-  <script src="js/ui.js?v=7"></script>
-  <script src="js/vistas/inicio.js?v=7"></script>
-  <script src="js/vistas/vender.js?v=7"></script>
-  <script src="js/vistas/clientes.js?v=7"></script>
-  <script src="js/vistas/productos.js?v=7"></script>
-  <script src="js/vistas/mercaderia.js?v=7"></script>
-  <script src="js/vistas/caja.js?v=7"></script>
-  <script src="js/vistas/informes.js?v=7"></script>
-  <script src="js/app.js?v=7"></script>
+  <script src="js/db.js?v=8"></script>
+  <script src="js/logica.js?v=8"></script>
+  <script src="js/ui.js?v=8"></script>
+  <script src="js/vistas/inicio.js?v=8"></script>
+  <script src="js/vistas/vender.js?v=8"></script>
+  <script src="js/vistas/clientes.js?v=8"></script>
+  <script src="js/vistas/productos.js?v=8"></script>
+  <script src="js/vistas/mercaderia.js?v=8"></script>
+  <script src="js/vistas/caja.js?v=8"></script>
+  <script src="js/vistas/informes.js?v=8"></script>
+  <script src="js/app.js?v=8"></script>
 </body>
 </html>

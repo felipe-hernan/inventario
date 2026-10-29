@@ -35,6 +35,7 @@ const UI = {
       else a.removeAttribute('aria-current');
     });
     UI.renderEstadoCaja();
+    UI.actualizarInsignia();
     App.vistas[v]();
   },
 
@@ -128,6 +129,52 @@ const UI = {
       : '<a href="#caja" class="estado-caja cerrada"><span class="punto"></span>Caja cerrada</a>';
   },
 
+  // ---------- Notificaciones ----------
+  actualizarInsignia() {
+    const boton = $('.boton-notif');
+    if (!boton) return;
+    const total = Logica.notificaciones().length;
+    const nuevas = Logica.notificacionesNuevas().length;
+    const insignia = $('.insignia', boton);
+    insignia.hidden = nuevas === 0;
+    insignia.textContent = nuevas > 9 ? '9+' : String(nuevas);
+    boton.setAttribute('aria-label', `Notificaciones: ${total}${nuevas ? `, ${nuevas} ${nuevas === 1 ? 'nueva' : 'nuevas'}` : ''}`);
+  },
+
+  panelNotifAbierto() {
+    return !$('#panel-notif').hidden;
+  },
+
+  abrirNotificaciones(abrir) {
+    const panel = $('#panel-notif');
+    const boton = $('.boton-notif');
+    if (!abrir) {
+      panel.hidden = true;
+      boton.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    const lista = Logica.notificaciones();
+    const nuevas = new Set(Logica.notificacionesNuevas(lista).map(n => n.clave));
+    panel.innerHTML = `
+      <div class="notif-cabecera">
+        <h2>Notificaciones</h2>
+        <span class="sub-inline">${lista.length ? `${lista.length} ${lista.length === 1 ? 'aviso' : 'avisos'}` : ''}</span>
+      </div>
+      ${lista.length ? `<ul class="notif-lista">${lista.map(n => `<li>
+        <button type="button" class="notif notif-${n.tipo} ${nuevas.has(n.clave) ? 'nueva' : ''}" data-accion="notif-ir"
+          data-tipo="${n.tipo}" data-producto="${n.productoId || ''}" data-cliente="${n.clienteId || ''}">
+          <span class="notif-etiqueta">${n.etiqueta}${nuevas.has(n.clave) ? ' <span class="notif-punto" aria-label="nueva"></span>' : ''}</span>
+          <span class="notif-titulo">${esc(n.titulo)}</span>
+          <span class="notif-detalle">${esc(n.detalle)}</span>
+        </button>
+      </li>`).join('')}</ul>`
+      : '<p class="notif-vacio">Todo en orden. No hay avisos.</p>'}`;
+    panel.hidden = false;
+    boton.setAttribute('aria-expanded', 'true');
+    Logica.marcarNotificacionesVistas(lista);
+    UI.actualizarInsignia();
+  },
+
   // Formulario de apertura de caja (se usa desde Inicio, Vender y Caja).
   abrirCajaDialogo() {
     const anterior = Logica.ultimaCajaCerrada();
@@ -150,6 +197,23 @@ const UI = {
 };
 
 App.acciones['dlg-cerrar'] = () => UI.cerrarDialogo();
+
+// Cada notificación lleva a la pantalla donde se resuelve.
+App.acciones['notif-ir'] = el => {
+  UI.abrirNotificaciones(false);
+  const { tipo, producto, cliente } = el.dataset;
+  if (tipo === 'caja') return UI.navegar('caja');
+  if (tipo === 'limite') return App.acciones['cliente-cuenta']({ dataset: { id: cliente } });
+  if (tipo === 'stock') {
+    App.estado.reponerId = +producto;
+    App.estado.mercTab = 'ingresar';
+    return UI.navegar('mercaderia');
+  }
+  // Vencidos y por vencer: inventario filtrado por ese producto, desde donde se ajusta.
+  App.estado.mercTab = 'inventario';
+  App.estado.inventarioBusqueda = DB.buscar('productos', +producto).nombre;
+  UI.navegar('mercaderia');
+};
 App.acciones['caja-abrir-dialogo'] = () => UI.abrirCajaDialogo();
 App.envios['caja-abrir'] = form => {
   try {

@@ -8,6 +8,7 @@ Es una página estática (HTML, CSS y JavaScript sin dependencias), lista para G
 
 | Pantalla | Qué hace |
 |---|---|
+| **Notificaciones** | Campana en la barra con los avisos: vencidos, por vencer, poco stock, clientes que pasaron su límite de fiado y caja abierta desde un día anterior. Marca cuáles son nuevos y cada aviso lleva a la pantalla donde se resuelve. |
 | **Inicio** | Estado de la caja y los avisos: vencidos (con botón para sacarlos del stock), por vencer, poco stock y fiado a cobrar. |
 | **Vender** | Escanear o buscar productos, armar el ticket y cobrar con efectivo (calcula el vuelto), débito, crédito, transferencia o fiado. Aplica el precio por mayor solo. Descuenta stock por FEFO y no vende vencidos. |
 | **Clientes** | Fiado: saldo de cada cliente, estado de cuenta, cobros, límite de crédito y envío de la cuenta por WhatsApp. |

@@ -604,6 +604,56 @@ const Logica = {
     };
   },
 
+  // ---------- Notificaciones ----------
+  // Cada aviso tiene una clave estable para saber si ya se vio.
+  notificaciones() {
+    const hoy = Fechas.hoy();
+    const lista = [];
+    const caja = Logica.cajaAbierta();
+    if (caja && caja.fecha_apertura.slice(0, 10) < hoy) {
+      lista.push({
+        clave: `caja-${caja.id}`, tipo: 'caja', etiqueta: 'Caja',
+        titulo: `La caja sigue abierta desde el ${Formato.fecha(caja.fecha_apertura)}`,
+        detalle: 'Cerrala para tener el arqueo de ese día.'
+      });
+    }
+    const a = Logica.avisos();
+    a.vencidos.forEach(x => lista.push({
+      clave: `vencido-${x.lote.id}`, tipo: 'vencido', etiqueta: 'Vencido', productoId: x.producto.id,
+      titulo: x.producto.nombre,
+      detalle: `${Formato.cantidad(x.producto, x.lote.cantidad_actual)} del lote ${x.lote.id}, ${Formato.vence(x.dias)}`
+    }));
+    a.porVencer.forEach(x => lista.push({
+      clave: `por-vencer-${x.lote.id}`, tipo: 'por-vencer', etiqueta: 'Por vencer', productoId: x.producto.id,
+      titulo: x.producto.nombre,
+      detalle: `${Formato.cantidad(x.producto, x.lote.cantidad_actual)} del lote ${x.lote.id}, ${Formato.vence(x.dias)}`
+    }));
+    a.pocoStock.forEach(x => lista.push({
+      clave: `stock-${x.producto.id}-${x.stock}`, tipo: 'stock', etiqueta: x.stock ? 'Poco stock' : 'Sin stock', productoId: x.producto.id,
+      titulo: x.producto.nombre,
+      detalle: x.stock ? `Quedan ${Formato.cantidad(x.producto, x.stock)}, el mínimo es ${Formato.cantidad(x.producto, x.producto.stock_minimo)}` : 'No queda stock para vender'
+    }));
+    Logica.deudores()
+      .filter(d => d.cliente.limite_credito != null && d.saldo > d.cliente.limite_credito)
+      .forEach(d => lista.push({
+        clave: `limite-${d.cliente.id}-${d.saldo}`, tipo: 'limite', etiqueta: 'Fiado', clienteId: d.cliente.id,
+        titulo: d.cliente.nombre,
+        detalle: `Debe ${Formato.plata(d.saldo)} y su límite es ${Formato.plata(d.cliente.limite_credito)}`
+      }));
+    return lista;
+  },
+
+  notificacionesNuevas(lista = Logica.notificaciones()) {
+    const vistas = new Set(DB.data.config.notifVistas || []);
+    return lista.filter(n => !vistas.has(n.clave));
+  },
+
+  marcarNotificacionesVistas(lista = Logica.notificaciones()) {
+    // Solo se guardan las claves vigentes, así la lista no crece para siempre.
+    DB.data.config.notifVistas = lista.map(n => n.clave);
+    DB.guardar();
+  },
+
   // ---------- Importar productos desde CSV ----------
   COLUMNAS_IMPORTACION: {
     nombre: ['nombre', 'descripcion', 'producto'],

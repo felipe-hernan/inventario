@@ -32,6 +32,19 @@
   // Cerrar el diálogo tocando afuera
   $('#dlg').addEventListener('click', e => { if (e.target.id === 'dlg') UI.cerrarDialogo(); });
 
+  // ---------- Notificaciones ----------
+  const botonNotif = $('.boton-notif');
+  botonNotif.addEventListener('click', () => {
+    menuAbierto(false);
+    UI.abrirNotificaciones(!UI.panelNotifAbierto());
+  });
+  document.addEventListener('click', e => {
+    if (UI.panelNotifAbierto() && !e.target.closest('#panel-notif, .boton-notif')) UI.abrirNotificaciones(false);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && UI.panelNotifAbierto()) { UI.abrirNotificaciones(false); botonNotif.focus(); }
+  });
+
   // ---------- Menú sándwich (celular) ----------
   const barra = $('.barra');
   const botonMenu = $('.boton-menu');
@@ -41,7 +54,10 @@
     botonMenu.setAttribute('aria-expanded', String(abrir));
     botonMenu.setAttribute('aria-label', abrir ? 'Cerrar menú' : 'Abrir menú');
   }
-  if (botonMenu) botonMenu.addEventListener('click', () => menuAbierto(!barra.classList.contains('abierta')));
+  if (botonMenu) botonMenu.addEventListener('click', () => {
+    UI.abrirNotificaciones(false);
+    menuAbierto(!barra.classList.contains('abierta'));
+  });
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape' && barra.classList.contains('abierta')) { menuAbierto(false); botonMenu.focus(); }
   });
@@ -54,6 +70,7 @@
 
   window.addEventListener('hashchange', () => {
     menuAbierto(false);
+    UI.abrirNotificaciones(false);
     UI.cerrarDialogo();
     UI.render();
     window.scrollTo(0, 0);
