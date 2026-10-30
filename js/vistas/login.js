@@ -4,37 +4,35 @@
 
   App.vistas.login = function () {
     UI.vista().innerHTML = `
-      <div class="login">
-        <form class="login-tarjeta" data-enviar="login" novalidate>
-          <div class="login-marca">
-            <span class="marca-nombre">Almacén</span>
-            <span class="marca-sub">Control de stock</span>
-          </div>
-          <h1>Ingresar</h1>
-          <p class="error" id="login-error" role="alert"></p>
-          <label class="campo">Usuario
-            <input name="usuario" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false" data-foco>
-          </label>
-          <label class="campo">Contraseña
-            <input name="clave" type="password" autocomplete="current-password">
-          </label>
-          <label class="opcion"><input type="checkbox" data-cambio="login-ver"> Mostrar contraseña</label>
-          <button type="submit" class="boton boton-grande boton-ancho">Ingresar</button>
-          <p class="ayuda login-ayuda">¿No tenés usuario o te olvidaste la contraseña? Pedíselo al administrador del sistema.</p>
-        </form>
-        <aside class="login-demo" aria-label="Usuarios de prueba">
-          <p><strong>Usuarios de prueba</strong></p>
-          <p>Administrador: <code>admin</code> / <code>admin123</code></p>
-          <p>Vendedora: <code>laura</code> / <code>laura123</code></p>
+      <div class="login d-flex flex-column align-items-center justify-content-center gap-3 px-3 py-5" data-bs-theme="light">
+        <div class="card shadow-lg border-0" style="width: min(24rem, 100%)">
+          <form class="card-body p-4" data-enviar="login" novalidate>
+            <div class="marca-login mb-4">
+              <div class="fs-4 fw-bold">Almacén</div>
+              <div class="small text-body-secondary">Control de stock</div>
+            </div>
+            <h1 class="h4 mb-3">Ingresar</h1>
+            ${H.error('login-error')}
+            ${H.campo('Usuario', `<div class="input-group"><span class="input-group-text"><i class="bi bi-person"></i></span>
+              <input class="form-control" name="usuario" autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false"></div>`)}
+            ${H.campo('Contraseña', `<div class="input-group"><span class="input-group-text"><i class="bi bi-lock"></i></span>
+              <input class="form-control" name="clave" type="password" autocomplete="current-password"></div>`)}
+            ${H.check('data-cambio="login-ver"', 'Mostrar contraseña', '', 'checkbox', 'mb-3')}
+            <button type="submit" class="btn btn-primary btn-lg w-100">Ingresar</button>
+            <p class="small text-body-secondary text-center mt-3 mb-0">¿No tenés usuario o te olvidaste la contraseña? Pedíselo al administrador del sistema.</p>
+          </form>
+        </div>
+        <aside class="login-demo rounded-3 p-3 small" style="width: min(24rem, 100%)" aria-label="Usuarios de prueba">
+          <div class="fw-bold mb-1">Usuarios de prueba</div>
+          <div>Administrador: <code>admin</code> / <code>admin123</code></div>
+          <div>Vendedora: <code>laura</code> / <code>laura123</code></div>
         </aside>
       </div>`;
     const usuario = $('[name=usuario]');
     if (usuario) usuario.focus();
   };
 
-  App.cambios['login-ver'] = el => {
-    el.form.elements.clave.type = el.checked ? 'text' : 'password';
-  };
+  App.cambios['login-ver'] = el => { el.form.elements.clave.type = el.checked ? 'text' : 'password'; };
 
   App.envios.login = form => {
     const err = $('#login-error');
@@ -65,36 +63,27 @@
     const carrito = App.estado.venta && App.estado.venta.carrito.length;
     if (carrito && !confirm('Hay un ticket sin cobrar. Si salís, se descarta. ¿Salir igual?')) return;
     if (App.estado.venta) { App.estado.venta.carrito = []; App.estado.venta.sel = null; }
+    const barra = bootstrap.Offcanvas.getInstance($('#barra'));
+    if (barra) barra.hide();
     UI.cerrarDialogo();
     Sesion.cerrar();
     history.replaceState(null, '', '#inicio');
     UI.render();
   };
 
-  // Mi cuenta: cada usuario puede cambiar su propia contraseña.
   App.acciones['mi-cuenta'] = () => {
     const u = UI.usuario;
-    UI.abrirDialogo(`
-      <form class="dlg-cuerpo" data-enviar="mi-clave" novalidate>
-        ${UI.cabecera('Mi cuenta', `${esc(u.nombre)}, usuario «${esc(u.usuario)}», ${ROLES[u.rol].toLowerCase()}`)}
-        <p class="error" id="dlg-error" role="alert"></p>
-        <h3 class="sin-margen">Cambiar contraseña</h3>
-        <label class="campo">Contraseña actual
-          <input name="actual" type="password" autocomplete="current-password" data-foco>
-        </label>
-        <label class="campo">Contraseña nueva
-          <input name="nueva" type="password" autocomplete="new-password">
-          <span class="ayuda">Al menos 6 caracteres.</span>
-        </label>
-        <label class="campo">Repetí la contraseña nueva
-          <input name="repetir" type="password" autocomplete="new-password">
-        </label>
-        <div class="dlg-pie">
-          <span class="espacio"></span>
-          <button type="button" class="boton boton-sec" data-accion="dlg-cerrar">Cancelar</button>
-          <button type="submit" class="boton">Cambiar contraseña</button>
-        </div>
-      </form>`, { ancho: 'chico' });
+    const barra = bootstrap.Offcanvas.getInstance($('#barra'));
+    if (barra) barra.hide();
+    UI.abrirDialogo({
+      titulo: 'Mi cuenta', subtitulo: `${esc(u.nombre)}, usuario «${esc(u.usuario)}», ${ROLES[u.rol].toLowerCase()}`, enviar: 'mi-clave',
+      cuerpo: `${H.error()}
+        <h3 class="h6 mb-3">Cambiar contraseña</h3>
+        ${H.campo('Contraseña actual', '<input class="form-control" name="actual" type="password" autocomplete="current-password" data-foco>')}
+        ${H.campo('Contraseña nueva', '<input class="form-control" name="nueva" type="password" autocomplete="new-password">', 'Al menos 6 caracteres.')}
+        ${H.campo('Repetí la contraseña nueva', '<input class="form-control" name="repetir" type="password" autocomplete="new-password">')}`,
+      pie: UI.pie('Cambiar contraseña')
+    }, { ancho: 'chico' });
   };
 
   App.envios['mi-clave'] = form => {

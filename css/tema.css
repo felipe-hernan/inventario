@@ -1,0 +1,182 @@
+/*
+ * Tema propio sobre Bootstrap 5.3.
+ * Bootstrap se usa tal cual (lib/); acá solo se cambian colores y unas pocas piezas propias.
+ * Si borrás este archivo, ves el Bootstrap "de fábrica".
+ */
+
+/* ---------- Colores de la marca ---------- */
+:root, [data-bs-theme="light"] {
+  --marca: #1C4434;
+  --marca-hover: #255A45;
+  --marca-texto: #ffffff;
+  --mostaza: #E2AE34;
+  --bs-primary: #1C4434;
+  --bs-primary-rgb: 28, 68, 52;
+  --bs-primary-text-emphasis: #12301f;
+  --bs-primary-bg-subtle: #E3F1E9;
+  --bs-primary-border-subtle: #A9CDB9;
+  --bs-link-color: #1F6B4A;
+  --bs-link-color-rgb: 31, 107, 74;
+  --bs-link-hover-color: #154d35;
+  --fondo: #F2F5F3;            /* fondo de la página */
+  --fondo-exterior: #DCE3DE;   /* a los costados en monitores anchos */
+  /* --bs-body-bg queda blanco: es el fondo de tarjetas, modales y campos */
+}
+[data-bs-theme="dark"] {
+  --marca: #84C9A6;
+  --marca-hover: #A2D9BD;
+  --marca-texto: #0B1C15;
+  --bs-primary: #84C9A6;
+  --bs-primary-rgb: 132, 201, 166;
+  --bs-primary-text-emphasis: #A2D9BD;
+  --bs-primary-bg-subtle: #15301F;
+  --bs-primary-border-subtle: #2E5A43;
+  --bs-link-color: #84C9A6;
+  --bs-link-color-rgb: 132, 201, 166;
+  --bs-link-hover-color: #A2D9BD;
+  --bs-body-bg: #18221D;
+  --bs-secondary-bg: #222C27;
+  --bs-tertiary-bg: #1D2722;
+  --fondo: #0F1613;
+  --fondo-exterior: #090D0B;
+}
+.btn-primary {
+  --bs-btn-color: var(--marca-texto);
+  --bs-btn-bg: var(--marca);
+  --bs-btn-border-color: var(--marca);
+  --bs-btn-hover-color: var(--marca-texto);
+  --bs-btn-hover-bg: var(--marca-hover);
+  --bs-btn-hover-border-color: var(--marca-hover);
+  --bs-btn-active-color: var(--marca-texto);
+  --bs-btn-active-bg: var(--marca-hover);
+  --bs-btn-active-border-color: var(--marca-hover);
+  --bs-btn-disabled-color: var(--marca-texto);
+  --bs-btn-disabled-bg: var(--marca);
+  --bs-btn-disabled-border-color: var(--marca);
+}
+.btn-outline-primary {
+  --bs-btn-color: var(--marca);
+  --bs-btn-border-color: var(--marca);
+  --bs-btn-hover-color: var(--marca-texto);
+  --bs-btn-hover-bg: var(--marca);
+  --bs-btn-hover-border-color: var(--marca);
+  --bs-btn-active-color: var(--marca-texto);
+  --bs-btn-active-bg: var(--marca);
+  --bs-btn-active-border-color: var(--marca);
+}
+.form-check-input:checked { background-color: var(--marca); border-color: var(--marca); }
+.form-control:focus, .form-select:focus, .form-check-input:focus, .btn:focus-visible {
+  border-color: var(--mostaza);
+  box-shadow: 0 0 0 .25rem rgba(226, 174, 52, .35);
+}
+.nav-tabs .nav-link.active { border-bottom: 3px solid var(--mostaza); font-weight: 600; }
+.progress-bar { background-color: var(--mostaza); }
+.alert:empty { display: none; }
+.min-w-0 { min-width: 0; }
+.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.table > thead th { background: var(--bs-tertiary-bg); font-size: .8125rem; color: var(--bs-secondary-color); font-weight: 600; white-space: nowrap; }
+.table .sub { display: block; font-size: .8125rem; color: var(--bs-secondary-color); }
+
+/* ---------- Estructura: centrado en monitores anchos ---------- */
+body { background: var(--fondo-exterior); }
+.app { max-width: 90rem; margin: 0 auto; background: var(--fondo); min-height: 100vh; }
+@media (min-width: 90.01rem) { .app { box-shadow: 0 0 0 1px var(--bs-border-color), 0 12px 48px rgba(20, 40, 30, .10); } }
+main { padding: 2rem clamp(1rem, 3vw, 2.5rem) 4rem; min-width: 0; }
+main:focus { outline: none; }
+
+/* ---------- Barra lateral ---------- */
+.barra-movil { background: #1C4434; }
+.marca-chica { font-weight: 700; border-left: 4px solid var(--mostaza); padding-left: .625rem; }
+.marca { color: #E8F1EC; text-decoration: none; border-left: 4px solid var(--mostaza); padding-left: .75rem; }
+@media (min-width: 992px) {
+  /* offcanvas-lg fuerza fondo transparente y ancho automático en pantallas grandes */
+  .barra { width: 15.5rem !important; flex: none !important; background-color: #1C4434 !important; position: sticky !important; top: 0; height: 100vh !important; z-index: 1020 !important; }
+  .barra .offcanvas-body { height: 100%; overflow-y: auto; }
+}
+@media (max-width: 991.98px) {
+  .barra { --bs-offcanvas-bg: #1C4434; --bs-offcanvas-width: 18rem; }
+}
+.barra { color: #E8F1EC !important; }
+.menu .nav-link { color: #C9DCD1; display: flex; align-items: center; gap: .625rem; }
+.menu .nav-link:hover { color: #fff; background: rgba(255, 255, 255, .06); }
+.menu .nav-link.active { color: #fff; background: rgba(255, 255, 255, .12); box-shadow: inset 3px 0 0 var(--mostaza); font-weight: 600; }
+.menu .nav-link[hidden] { display: none; }
+.estado-caja {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .5rem .75rem; border-radius: .5rem;
+  background: rgba(255, 255, 255, .07); color: #E8F1EC;
+  font-size: .875rem; text-decoration: none;
+}
+.estado-caja .punto { width: .625rem; height: .625rem; border-radius: 50%; flex: none; }
+.estado-caja.abierta .punto { background: #5DD39E; box-shadow: 0 0 0 3px rgba(93, 211, 158, .25); }
+.estado-caja.cerrada .punto { background: #E8836F; }
+.avatar {
+  display: grid; place-items: center; flex: none;
+  width: 2.25rem; height: 2.25rem; border-radius: 50%;
+  background: var(--mostaza); color: #1B1B1B; font-weight: 700;
+}
+
+/* ---------- Notificaciones ---------- */
+.boton-notif { color: #E8F1EC; border: 0; border-radius: 50%; width: 2.75rem; height: 2.75rem; padding: 0; }
+.boton-notif:hover, .boton-notif.show { background: rgba(255, 255, 255, .14); color: #fff; }
+.insignia { top: .3rem; right: -.1rem; font-size: .65rem; }
+.panel-notif { width: 22rem; max-width: calc(100vw - 1rem); }
+.barra-movil .panel-notif { position: fixed !important; top: 3.75rem !important; left: .5rem !important; right: .5rem !important; width: auto; margin: 0; }
+.notif-lista { max-height: min(30rem, calc(100vh - 8rem)); overflow-y: auto; }
+
+/* ---------- Login ---------- */
+body.sin-sesion .barra, body.sin-sesion .barra-movil { display: none !important; }
+body.sin-sesion main { padding: 0; }
+.login { min-height: 100vh; background: #1C4434; }
+.login .marca-login { border-left: 4px solid var(--mostaza); padding-left: .875rem; }
+.login-demo { border: 1px dashed rgba(255, 255, 255, .35); color: #E8F1EC; }
+.login-demo code { background: rgba(255, 255, 255, .12); color: #fff; padding: .0625rem .375rem; border-radius: 4px; }
+
+/* ---------- Modal con formulario y scroll ---------- */
+.modal-form { display: flex; flex-direction: column; min-height: 0; max-height: 100%; }
+.modal-dialog-scrollable .modal-form .modal-body { overflow-y: auto; }
+
+/* ---------- Ticket: pieza propia, no es de Bootstrap ---------- */
+.ticket-envoltura { position: sticky; top: 1.5rem; filter: drop-shadow(0 1px 1px rgba(20, 40, 30, .12)) drop-shadow(0 6px 14px rgba(20, 40, 30, .10)); }
+.ticket {
+  background: var(--bs-body-bg);
+  padding: 1.5rem 1.375rem 2.25rem;
+  font-family: var(--bs-font-monospace);
+  font-size: .9rem;
+  -webkit-mask: radial-gradient(9px at 50% 100%, #0000 98%, #000) 50% / 18px 100%;
+  mask: radial-gradient(9px at 50% 100%, #0000 98%, #000) 50% / 18px 100%;
+}
+.ticket h2 { font-family: var(--bs-font-monospace); text-align: center; font-size: 1rem; letter-spacing: .2em; margin-bottom: .125rem; }
+.ticket-fecha { text-align: center; font-size: .8rem; color: var(--bs-secondary-color); padding-bottom: .75rem; border-bottom: 1px dashed var(--bs-secondary-color); }
+.renglon { display: grid; grid-template-columns: 1fr auto auto; column-gap: .5rem; align-items: center; padding: .5rem 0; border-bottom: 1px dotted var(--bs-border-color); }
+.renglon-nombre { grid-column: 1 / 3; font-weight: 700; }
+.renglon-detalle { grid-column: 1; color: var(--bs-secondary-color); font-size: .8rem; }
+.renglon-sub { grid-column: 2; grid-row: 2; text-align: right; }
+.renglon .btn { grid-column: 3; grid-row: 1 / 3; }
+.ticket-total { display: flex; justify-content: space-between; align-items: baseline; margin: .75rem 0 1rem; padding-top: .75rem; border-top: 1px dashed var(--bs-secondary-color); }
+.ticket-total strong { font-size: 1.5rem; }
+.ticket .btn { font-family: var(--bs-body-font-family); }
+@media (max-width: 991.98px) { .ticket-envoltura { position: static; } }
+
+/* ---------- Detalles ---------- */
+.aviso { border-top-width: 4px; }
+.aviso-danger { border-top-color: var(--bs-danger); }
+.aviso-warning { border-top-color: var(--bs-warning); }
+.aviso-primary { border-top-color: var(--marca); }
+.aviso-info { border-top-color: var(--bs-info); }
+.cuentas .list-group-item { display: flex; justify-content: space-between; gap: 1rem; padding-left: 0; padding-right: 0; background: transparent; font-variant-numeric: tabular-nums; }
+.cuentas .list-group-item > span:last-child { white-space: nowrap; }
+.cuentas .total { font-weight: 700; border-top: 2px solid var(--bs-emphasis-color); }
+.tabla-alta { max-height: 50vh; overflow-y: auto; }
+.cobro-total { font-size: 2.5rem; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.medios { display: grid; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); gap: .5rem; }
+.medios .btn { min-height: 3rem; display: flex; align-items: center; justify-content: center; font-weight: 600; }
+
+/* ---------- Impresión del cierre ---------- */
+@media print {
+  .app, .toast-container, .no-imprimir, .modal-backdrop { display: none !important; }
+  .modal { position: static; display: block !important; }
+  .modal-dialog { max-width: 100%; margin: 0; transform: none !important; }
+  .modal-content { border: 0; box-shadow: none; }
+  .modal-dialog-scrollable .modal-body { overflow: visible; }
+}
