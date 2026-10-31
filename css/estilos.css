@@ -2,7 +2,6 @@
 :root {
   color-scheme: light;
   --fondo: #EDF1EE;
-  --fondo-exterior: #DCE3DE;
   --papel: #FFFFFF;
   --tinta: #16201B;
   --tinta-suave: #4F5C55;
@@ -33,7 +32,6 @@
   :root {
     color-scheme: dark;
     --fondo: #0F1613;
-    --fondo-exterior: #090D0B;
     --papel: #18221D;
     --tinta: #E6EEE9;
     --tinta-suave: #A2B2A9;
@@ -64,7 +62,7 @@ body {
   font-size: 1rem;
   line-height: 1.5;
   color: var(--tinta);
-  background: var(--fondo-exterior);
+  background: var(--fondo);
 }
 h1, h2, h3 { line-height: 1.2; margin: 0 0 .75rem; }
 h1 { font-size: 1.75rem; letter-spacing: -0.01em; }
@@ -85,13 +83,8 @@ input, button { font: inherit; color: inherit; }
   display: grid;
   grid-template-columns: 15rem minmax(0, 1fr);
   min-height: 100vh;
-  /* En monitores anchos todo queda centrado, con el ancho de una notebook */
-  max-width: 90rem;
-  margin: 0 auto;
+  /* Ocupa todo el ancho de la pantalla, también en monitores ultrawide */
   background: var(--fondo);
-}
-@media (min-width: 90.01rem) {
-  .app { box-shadow: 0 0 0 1px var(--linea), 0 12px 48px rgba(20, 40, 30, .10); }
 }
 .app > * { min-width: 0; }
 .barra {
@@ -300,6 +293,7 @@ legend { font-weight: 700; font-size: .9375rem; padding: 0; margin-bottom: .3rem
 .cifras-cuatro { background: var(--papel); border: 1px solid var(--linea); border-radius: 10px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
 
 .avisos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
+@media (min-width: 100rem) { .avisos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 40rem) { .avisos { grid-template-columns: minmax(0, 1fr); } }
 .aviso {
   background: var(--papel);

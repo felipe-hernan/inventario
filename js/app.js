@@ -1,5 +1,5 @@
 /*
- * Arranque: eventos globales, menú lateral (offcanvas de Bootstrap) y notificaciones (dropdown).
+ * Arranque de la demo: eventos globales y menú del celular.
  */
 (function () {
   // ---------- Eventos delegados ----------
@@ -29,44 +29,64 @@
       App.envios[form.dataset.enviar](form, e);
     }
   });
+  // Cerrar el diálogo tocando afuera
+  $('#dlg').addEventListener('click', e => { if (e.target.id === 'dlg') UI.cerrarDialogo(); });
 
-  // El modal enfoca su primer campo al terminar de abrirse
-  $('#dlg').addEventListener('shown.bs.modal', () => UI._enfocarModal());
-
-  // Al abrir la campana se arma la lista y se marcan como vistas
-  document.addEventListener('show.bs.dropdown', e => {
-    if (e.target.classList.contains('boton-notif')) UI.renderNotificaciones(e.target.nextElementSibling);
+  // ---------- Notificaciones ----------
+  const botonNotif = $('.boton-notif');
+  botonNotif.addEventListener('click', () => {
+    menuAbierto(false);
+    UI.abrirNotificaciones(!UI.panelNotifAbierto());
+  });
+  document.addEventListener('click', e => {
+    if (UI.panelNotifAbierto() && !e.target.closest('#panel-notif, .boton-notif')) UI.abrirNotificaciones(false);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && UI.panelNotifAbierto()) { UI.abrirNotificaciones(false); botonNotif.focus(); }
   });
 
-  // Al navegar: cerrar el menú del celular, el modal y las notificaciones
+  // ---------- Menú sándwich (celular) ----------
+  const barra = $('.barra');
+  const botonMenu = $('.boton-menu');
+  function menuAbierto(abrir) {
+    if (!botonMenu) return;
+    barra.classList.toggle('abierta', abrir);
+    botonMenu.setAttribute('aria-expanded', String(abrir));
+    botonMenu.setAttribute('aria-label', abrir ? 'Cerrar menú' : 'Abrir menú');
+  }
+  if (botonMenu) botonMenu.addEventListener('click', () => {
+    UI.abrirNotificaciones(false);
+    menuAbierto(!barra.classList.contains('abierta'));
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && barra.classList.contains('abierta')) { menuAbierto(false); botonMenu.focus(); }
+  });
+  document.addEventListener('click', e => {
+    if (barra.classList.contains('abierta') && !barra.contains(e.target)) menuAbierto(false);
+  });
+  barra.addEventListener('click', e => {
+    if (e.target.closest('.menu a, .estado-caja, [data-accion=datos-abrir]')) menuAbierto(false);
+  });
+
   window.addEventListener('hashchange', () => {
-    const barra = bootstrap.Offcanvas.getInstance($('#barra'));
-    if (barra) barra.hide();
-    UI.cerrarNotificaciones();
+    menuAbierto(false);
+    UI.abrirNotificaciones(false);
     UI.cerrarDialogo();
     UI.render();
     window.scrollTo(0, 0);
     UI.vista().focus({ preventScroll: true });
   });
-  // Tocar un link del menú en el celular también lo cierra (aunque sea la misma pantalla)
-  $$('.menu .nav-link, #estado-caja').forEach(a => a.addEventListener('click', () => {
-    const barra = bootstrap.Offcanvas.getInstance($('#barra'));
-    if (barra) barra.hide();
-  }));
 
   // ---------- Datos de la demo ----------
-  App.acciones['datos-abrir'] = () => {
-    const barra = bootstrap.Offcanvas.getInstance($('#barra'));
-    if (barra) barra.hide();
-    UI.abrirDialogo({
-      titulo: 'Datos de la demo',
-      cuerpo: `<p>Todo lo que cargues queda guardado en este navegador, en esta computadora o celular. Otra persona que abra la demo ve sus propios datos.</p>
-        <div class="d-grid gap-2">
-          <button type="button" class="btn btn-outline-secondary" data-accion="datos-ejemplo"><i class="bi bi-arrow-counterclockwise"></i> Volver a los datos de ejemplo</button>
-          <button type="button" class="btn btn-outline-danger" data-accion="datos-vacio"><i class="bi bi-trash"></i> Empezar sin datos</button>
-        </div>`
-    }, { ancho: 'chico' });
-  };
+  App.acciones['datos-abrir'] = () => UI.abrirDialogo(`
+    <div class="dlg-cuerpo">
+      ${UI.cabecera('Datos de la demo')}
+      <p>Todo lo que cargues queda guardado en este navegador, en esta computadora o celular. Otra persona que abra la demo ve sus propios datos.</p>
+      <div class="pila">
+        <button type="button" class="boton boton-sec" data-accion="datos-ejemplo">Volver a los datos de ejemplo</button>
+        <button type="button" class="boton boton-sec" data-accion="datos-vacio">Empezar sin datos</button>
+      </div>
+    </div>`, { ancho: 'chico' });
   App.acciones['datos-ejemplo'] = () => {
     if (!confirm('Se borra todo lo que cargaste y vuelven los datos de ejemplo. ¿Seguir?')) return;
     DB.reiniciar(true);
@@ -78,24 +98,6 @@
     location.hash = 'inicio';
     location.reload();
   };
-
-  // ---------- Lector de código de barras ----------
-  // Si se escanea sin estar en un campo, se manda el código a la pantalla que corresponda.
-  Lector.iniciar(codigo => {
-    if (!UI.usuario || $('#dlg').classList.contains('show')) return;
-    const v = UI.vistaActual();
-    if (v === 'configuracion') return App.probarLector(codigo);
-    if (v === 'productos' && UI.esAdmin()) return App.escanearEnProductos(codigo);
-    if (v === 'mercaderia') return App.escanearEnMercaderia(codigo);
-    if (v !== 'vender') {
-      if (!Logica.cajaAbierta()) { UI.avisar('Abrí la caja para empezar a vender.'); return; }
-      // Primero se cambia de pantalla y después se agrega, así se ve el aviso de lo escaneado
-      window.addEventListener('hashchange', () => App.escanearEnVenta(codigo), { once: true });
-      UI.navegar('vender');
-      return;
-    }
-    App.escanearEnVenta(codigo);
-  });
 
   DB.cargar();
   UI.render();
