@@ -91,7 +91,7 @@ const Impresora = {
       <div class="sep"></div>`;
   },
 
-  ticketVenta(ventaId, { pagaCon = null } = {}) {
+  ticketVenta(ventaId) {
     const d = Logica.datosTicket(ventaId);
     const v = d.venta;
     const fila = (a, b, clase = '') => `<div class="fila ${clase}"><span>${a}</span><span>${b}</span></div>`;
@@ -104,8 +104,9 @@ const Impresora = {
         ${fila(`${esc(r.detalle)}${r.mayorista ? ' (x mayor)' : ''}`, Formato.plata(r.subtotal))}</div>`).join('')}
       <div class="sep"></div>
       ${fila('TOTAL', Formato.plata(v.total), 'b g')}
-      ${fila('Pago', Formato.medio(v.medio_pago))}
-      ${v.medio_pago === 'efectivo' && pagaCon >= v.total ? `${fila('Paga con', Formato.plata(pagaCon))}${fila('Vuelto', Formato.plata(pagaCon - v.total), 'b')}` : ''}
+      ${d.pagos.map(p => `${fila(`${esc(p.nombre)}${p.cuotas > 1 ? ` (${p.cuotas} cuotas)` : ''}`, Formato.plata(p.monto))}
+        ${p.estado === 'pendiente' ? '<div class="ch">(transferencia pendiente de verificación)</div>' : ''}
+        ${p.recibido ? `${fila('Paga con', Formato.plata(p.recibido))}${fila('Vuelto', Formato.plata(p.vuelto), 'b')}` : ''}`).join('')}
       ${d.cliente ? `<div class="sep"></div><div>Cliente: ${esc(d.cliente.nombre)}</div>${fila('Saldo de su cuenta', Formato.plata(d.saldoCliente), 'b')}` : ''}
       <div class="sep"></div>
       ${d.negocio.pie ? `<div class="c">${esc(d.negocio.pie)}</div>` : ''}
@@ -136,9 +137,12 @@ const Impresora = {
       ${fila('Se contó', Formato.plata(c.efectivo_contado))}
       ${fila('Diferencia', dif, 'b')}
       <div class="sep"></div>
-      <div class="b">VENTAS (${r.cantidad})</div>
-      ${r.porMedio.map(m => fila(m.medio.nombre, Formato.plata(m.total))).join('')}
+      <div class="b">COBROS DE VENTAS (${r.cantidad} ventas)</div>
+      ${r.porMedio.filter(m => m.ventas.cantidad).map(m => fila(esc(m.medio.nombre), Formato.plata(m.ventas.total))).join('')}
       ${fila('TOTAL VENDIDO', Formato.plata(r.total), 'b')}
+      ${r.porMedio.some(m => m.cobros.cantidad) ? `<div class="sep"></div><div class="b">COBROS DE FIADO</div>
+        ${r.porMedio.filter(m => m.cobros.cantidad).map(m => fila(esc(m.medio.nombre), Formato.plata(m.cobros.total))).join('')}` : ''}
+      ${r.transferenciasPendientes.cantidad ? `<div class="sep"></div>${fila('Transf. sin verificar', `${r.transferenciasPendientes.cantidad} / ${Formato.plata(r.transferenciasPendientes.total)}`, 'b')}` : ''}
       ${c.observacion ? `<div class="sep"></div><div>Nota: ${esc(c.observacion)}</div>` : ''}`;
     Impresora._imprimir(cuerpo, `Cierre ${c.id}`);
   },

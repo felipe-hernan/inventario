@@ -67,6 +67,7 @@
   border-color: var(--mostaza);
   box-shadow: 0 0 0 .25rem rgba(226, 174, 52, .35);
 }
+.nav-pills { --bs-nav-pills-link-active-bg: var(--marca); --bs-nav-pills-link-active-color: var(--marca-texto); --bs-nav-link-color: var(--bs-link-color); }
 .nav-tabs .nav-link.active { border-bottom: 3px solid var(--mostaza); font-weight: 600; }
 .progress-bar { background-color: var(--mostaza); }
 .alert:empty { display: none; }

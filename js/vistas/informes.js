@@ -39,7 +39,9 @@
         <div class="row g-3 mb-4">
           <div class="col-lg-6"><section class="card shadow-sm h-100"><div class="card-body">
             <h2 class="h6"><i class="bi bi-credit-card"></i> Por medio de pago</h2>
-            <ul class="list-group list-group-flush cuentas">${inf.porMedio.map(m => `<li class="list-group-item"><span>${m.medio.nombre}${m.cantidad ? ` <span class="badge rounded-pill text-bg-light border">${m.cantidad}</span>` : ''}</span><span>${Formato.plata(m.total)}</span></li>`).join('')}</ul>
+            <ul class="list-group list-group-flush cuentas">${inf.porMedio.map(m => `<li class="list-group-item flex-wrap"><span class="d-flex justify-content-between gap-2 w-100"><span>${esc(m.medio.nombre)}${m.ventas.cantidad ? ` <span class="badge rounded-pill text-bg-light border">${m.ventas.cantidad}</span>` : ''}</span><span class="text-nowrap">${Formato.plata(m.ventas.total)}</span></span>
+              ${m.ventas.pendiente ? `<span class="w-100 small text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ${Formato.plata(m.ventas.pendiente)} sin verificar</span>` : ''}</li>`).join('')}</ul>
+            <p class="small text-body-secondary mb-0 mt-2">Una venta pagada con dos medios suma en cada uno solo la parte que se pagó con él.</p>
           </div></section></div>
           <div class="col-lg-6"><section class="card shadow-sm h-100"><div class="card-body">
             <h2 class="h6"><i class="bi bi-folder2"></i> Por categoría</h2>
@@ -63,7 +65,8 @@
             const cliente = v.cliente_id ? DB.buscar('clientes', v.cliente_id) : null;
             return `<tr><td>${v.id}</td><td class="text-nowrap">${unDia ? Formato.hora(v.fecha_hora) : Formato.fechaHora(v.fecha_hora)}</td>
               <td class="small">${esc(Logica.detalleTexto(v.id))}</td>
-              <td>${Formato.medio(v.medio_pago)}${cliente ? `<span class="sub">${esc(cliente.nombre)}</span>` : ''}</td>
+              <td class="small">${esc(Logica.textoPagos(v.id))}${cliente ? `<span class="sub">${esc(cliente.nombre)}</span>` : ''}
+                ${{ pendiente: '<span class="badge text-bg-warning">Sin verificar</span>', problema: '<span class="badge text-bg-danger">Pago rechazado</span>' }[Logica.estadoVenta(v.id)] || ''}</td>
               <td>${esc(Logica.nombreUsuario(v.usuario_id)) || '—'}</td>
               <td class="num">${Formato.plata(v.total)}</td>
               <td class="text-end"><button type="button" class="btn btn-sm btn-outline-secondary" data-accion="ticket-reimprimir" data-id="${v.id}" title="Imprimir ticket" aria-label="Imprimir ticket de la venta ${v.id}"><i class="bi bi-printer"></i></button></td></tr>`;

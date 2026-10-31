@@ -1,6 +1,6 @@
 /* Vender: buscar o escanear, armar el ticket y cobrar eligiendo el medio de pago. */
 (function () {
-  const est = App.estado.venta = { carrito: [], sel: null, busqueda: '', aviso: null, ultima: null };
+  const est = App.estado.venta = { carrito: [], sel: null, busqueda: '', aviso: null, ultima: null, cobro: { pagos: [], medioId: null } };
   const enCarrito = id => (est.carrito.find(r => r.producto_id === id) || {}).cantidad || 0;
 
   function totalCarrito() {
@@ -157,7 +157,7 @@
     if (primero) primero.click();
   };
   App.acciones['venta-crear-codigo'] = el => App.abrirProducto(null, () => UI.navegar('vender'), { codigo: el.dataset.codigo });
-  App.acciones['venta-reimprimir'] = () => { if (est.ultima) Impresora.ticketVenta(est.ultima.id, { pagaCon: est.ultima.pagaCon }); };
+  App.acciones['venta-reimprimir'] = () => { if (est.ultima) Impresora.ticketVenta(est.ultima.id); };
   App.acciones['venta-elegir'] = el => { est.sel = +el.dataset.id; est.busqueda = ''; App.vistas.vender(); };
   App.acciones['venta-cambiar'] = () => { est.sel = null; App.vistas.vender(); };
   App.acciones['venta-atajo'] = el => {
@@ -182,52 +182,145 @@
   App.acciones['venta-quitar'] = el => { est.carrito.splice(+el.dataset.i, 1); App.vistas.vender(); };
   App.acciones['venta-vaciar'] = () => { est.carrito = []; App.vistas.vender(); };
 
-  // ---------- Cobro ----------
-  App.acciones['venta-cobrar'] = () => {
-    if (!est.carrito.length) return;
+  // ---------- Cobro: uno o varios pagos ----------
+  // est.cobro.pagos guarda los pagos ya agregados; el formulario es el pago que se está cargando.
+  const faltaCobrar = () => totalCarrito() - est.cobro.pagos.reduce((s, p) => s + p.monto, 0);
+
+  function descripcionPago(p) {
+    const tipo = Logica.tipoDe(p.medio_pago_id);
+    if (tipo === 'efectivo') return p.recibido ? `Paga con ${Formato.plata(p.recibido)}, vuelto ${Formato.plata(p.recibido - p.monto)}` : '';
+    if (tipo === 'transferencia') return `Operación ${esc(p.numero_operacion)}${p.acreditada ? ', acreditada' : ', sin verificar'}`;
+    if (tipo === 'credito') return `${p.cuotas || 1} ${p.cuotas > 1 ? 'cuotas' : 'cuota'}${p.cupon ? `, cupón ${esc(p.cupon)}` : ''}`;
+    if (tipo === 'debito') return p.cupon ? `Cupón ${esc(p.cupon)}` : '';
+    if (tipo === 'cuenta') return `A la cuenta de ${esc(Logica.nombreCliente(p.cliente_id))}`;
+    return '';
+  }
+
+  function abrirCobro() {
+    const falta = faltaCobrar();
+    const medios = Logica.mediosPago({ soloActivos: true });
+    const elegido = medios.find(m => m.id === est.cobro.medioId) || medios[0];
+    const cfg = Logica.config('transferencias');
+    const puedeVerificar = Logica.puedeVerificar();
+    const exigeVerificar = cfg.modo === 'antes' && !UI.esAdmin();
     const clientes = Logica.clientesActivos();
+    const pagados = est.cobro.pagos;
     UI.abrirDialogo({
       titulo: 'Cobrar', enviar: 'cobro',
       cuerpo: `
-        <p class="cobro-total mb-3">${Formato.plata(totalCarrito())}</p>
-        <fieldset class="mb-3">
-          <legend class="form-label fw-semibold fs-6">¿Cómo paga?</legend>
-          <div class="medios">
-            ${MEDIOS_PAGO.map((m, i) => `<input type="radio" class="btn-check" name="medio" id="medio-${m.id}" value="${m.id}" ${i === 0 ? 'checked' : ''} data-cambio="cobro-medio">
-              <label class="btn btn-outline-primary" for="medio-${m.id}">${m.nombre}</label>`).join('')}
-          </div>
-        </fieldset>
-        <div data-bloque="efectivo">
-          <div style="max-width: 16rem">${H.campo('Paga con <span class="fw-normal text-body-secondary">(opcional)</span>',
-            '<div class="input-group"><span class="input-group-text">$</span><input class="form-control" name="paga_con" type="number" min="0" step="1" inputmode="numeric" data-input="cobro-paga" data-foco></div>')}</div>
-          <p class="fs-4 fw-bold" id="cobro-vuelto" aria-live="polite"></p>
+        <div class="d-flex justify-content-between align-items-baseline mb-2">
+          <span class="text-body-secondary">Total</span><span class="cobro-total">${Formato.plata(totalCarrito())}</span>
         </div>
-        <div data-bloque="cuenta" hidden>
-          ${H.campo('Cliente', `<select class="form-select" name="cliente" data-cambio="cobro-cliente">
-            <option value="">Elegí un cliente</option>
-            ${clientes.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}
-            <option value="__nuevo">+ Cliente nuevo…</option></select>`)}
+        ${pagados.length ? `
+          <ul class="list-group mb-2">${pagados.map((p, i) => `<li class="list-group-item d-flex justify-content-between align-items-center gap-2">
+            <span><span class="fw-semibold">${esc(Formato.medio(p.medio_pago_id))}</span><span class="d-block small text-body-secondary">${descripcionPago(p)}</span></span>
+            <span class="d-flex align-items-center gap-2"><span class="fw-semibold">${Formato.plata(p.monto)}</span>
+              <button type="button" class="btn btn-sm btn-link text-body-secondary" data-accion="cobro-quitar" data-i="${i}" aria-label="Quitar este pago"><i class="bi bi-x-lg"></i></button></span>
+          </li>`).join('')}</ul>
+          <div class="d-flex justify-content-between align-items-baseline mb-3 fs-5 fw-bold ${falta ? 'text-danger' : 'text-success'}">
+            <span>${falta ? 'Falta cobrar' : 'Pagos completos'}</span><span>${Formato.plata(falta)}</span></div>` : ''}
+        ${falta ? `
+        <fieldset class="mb-3">
+          <legend class="form-label fw-semibold fs-6">${pagados.length ? '¿Cómo paga el resto?' : '¿Cómo paga?'}</legend>
+          <div class="medios">${medios.map(m => `<input type="radio" class="btn-check" name="medio" id="medio-${m.id}" value="${m.id}" ${m.id === elegido.id ? 'checked' : ''} data-cambio="cobro-medio">
+            <label class="btn btn-outline-primary" for="medio-${m.id}">${esc(m.nombre)}</label>`).join('')}</div>
+        </fieldset>
+        <div class="row g-3">
+          <div class="col-sm-6">${H.campo('Monto de este pago', `<div class="input-group"><span class="input-group-text">$</span><input class="form-control" name="monto" type="number" min="1" step="1" inputmode="numeric" value="${falta}" data-input="cobro-monto"></div>`,
+            'Si paga con más de un medio, poné cuánto va con este y tocá «Agregar otro medio».')}</div>
+          <div class="col-sm-6" data-bloque="efectivo">${H.campo('Paga con <span class="fw-normal text-body-secondary">(opcional)</span>',
+            '<div class="input-group"><span class="input-group-text">$</span><input class="form-control" name="recibido" type="number" min="0" step="1" inputmode="numeric" data-input="cobro-paga" data-foco></div>')}
+            <p class="fs-4 fw-bold mb-0" id="cobro-vuelto" aria-live="polite"></p></div>
+        </div>
+        <div class="row g-3" data-bloque="tarjeta">
+          <div class="col-sm-6">${H.campo('N.º de cupón <span class="fw-normal text-body-secondary">(opcional)</span>', '<input class="form-control" name="cupon" inputmode="numeric" autocomplete="off">')}</div>
+          <div class="col-sm-6" data-bloque="cuotas">${H.campo('Cuotas', `<select class="form-select" name="cuotas">${[1, 3, 6, 12].map(c => `<option value="${c}">${c}</option>`).join('')}</select>`)}</div>
+        </div>
+        <div data-bloque="transferencia">
+          <div class="row g-3">
+            <div class="col-sm-6">${H.campo('N.º de operación', '<input class="form-control" name="numero_operacion" inputmode="numeric" autocomplete="off">', 'Está en el comprobante del cliente.')}</div>
+            <div class="col-sm-6">${H.campo('Titular <span class="fw-normal text-body-secondary">(opcional)</span>', '<input class="form-control" name="titular" autocomplete="off">')}</div>
+          </div>
+          <div class="alert ${exigeVerificar ? 'alert-warning' : 'alert-light border'} py-2 mb-3">
+            <div class="form-check mb-0">
+              <input class="form-check-input" type="checkbox" id="acreditada" name="acreditada" ${puedeVerificar ? '' : 'disabled'}>
+              <label class="form-check-label" for="acreditada"><strong>Ya la verifiqué en la cuenta del negocio: está acreditada</strong></label>
+            </div>
+            <div class="small mt-1">${!puedeVerificar ? 'No tenés permiso para verificar: el administrador tiene que confirmarla.'
+              : exigeVerificar ? 'Es obligatorio verificarla antes de confirmar. Mirá la app del banco, no el celular del cliente.'
+              : 'Si no la verificás ahora, queda pendiente y se revisa después en «Transferencias».'}</div>
+          </div>
+        </div>
+        <div data-bloque="cuenta">
+          ${H.campo('Cliente', `<select class="form-select" name="cliente" data-cambio="cobro-cliente"><option value="">Elegí un cliente</option>
+            ${clientes.map(c => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('')}<option value="__nuevo">+ Cliente nuevo…</option></select>`)}
           <div data-bloque="cliente-nuevo" hidden>${H.campo('Nombre del cliente nuevo', '<input class="form-control" name="cliente_nuevo" autocomplete="off">')}</div>
           <p class="small" id="cobro-cliente-info"></p>
-        </div>
+        </div>` : ''}
         ${H.error()}`,
-      pie: UI.pie('<i class="bi bi-check-lg"></i> Confirmar venta', { cancelar: 'Volver' })
-    }, { ancho: 'chico' });
-  };
+      pie: `<button type="button" class="btn btn-outline-secondary me-auto" data-bs-dismiss="modal">Volver</button>
+        ${falta ? '<button type="button" class="btn btn-outline-primary" data-accion="cobro-agregar"><i class="bi bi-plus-lg"></i> Agregar otro medio</button>' : ''}
+        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Confirmar venta</button>`
+    }, { ancho: 'normal' });
+    if (falta) mostrarBloques($('#dlg form'));
+  }
 
+  function mostrarBloques(form) {
+    const marcado = form.querySelector('[name=medio]:checked');
+    const tipo = marcado ? Logica.tipoDe(+marcado.value) : null;
+    $('[data-bloque=efectivo]', form).hidden = tipo !== 'efectivo';
+    $('[data-bloque=tarjeta]', form).hidden = !['debito', 'credito'].includes(tipo);
+    $('[data-bloque=cuotas]', form).hidden = tipo !== 'credito';
+    $('[data-bloque=transferencia]', form).hidden = tipo !== 'transferencia';
+    $('[data-bloque=cuenta]', form).hidden = tipo !== 'cuenta';
+  }
+
+  // Lee el pago que se está cargando. Devuelve el pago o un texto de error.
+  function leerPago(form) {
+    const f = form.elements;
+    const medioId = +form.querySelector('[name=medio]:checked').value;
+    const tipo = Logica.tipoDe(medioId);
+    const pago = { medio_pago_id: medioId, monto: num(f.monto.value) };
+    if (!Number.isInteger(pago.monto) || pago.monto <= 0) return 'Poné el monto de este pago, sin centavos.';
+    if (tipo === 'efectivo' && f.recibido.value !== '') pago.recibido = num(f.recibido.value);
+    if (tipo === 'debito' || tipo === 'credito') { pago.cupon = f.cupon.value; if (tipo === 'credito') pago.cuotas = num(f.cuotas.value); }
+    if (tipo === 'transferencia') {
+      if (!f.numero_operacion.value.trim()) return 'Cargá el número de operación de la transferencia.';
+      Object.assign(pago, { numero_operacion: f.numero_operacion.value.trim(), titular: f.titular.value, acreditada: f.acreditada.checked });
+    }
+    if (tipo === 'cuenta') {
+      if (f.cliente.value === '__nuevo') {
+        try {
+          const nuevo = Logica.guardarCliente({ nombre: f.cliente_nuevo.value });
+          f.cliente.insertAdjacentHTML('beforeend', `<option value="${nuevo.id}">${esc(nuevo.nombre)}</option>`);
+          f.cliente.value = String(nuevo.id);
+          $('[data-bloque=cliente-nuevo]', form).hidden = true;
+        } catch (x) { return x.message; }
+      }
+      if (!f.cliente.value) return 'Para fiar, elegí el cliente.';
+      pago.cliente_id = +f.cliente.value;
+    }
+    return pago;
+  }
+
+  App.acciones['venta-cobrar'] = () => {
+    if (!est.carrito.length) return;
+    est.cobro = { pagos: [], medioId: null };
+    abrirCobro();
+  };
   App.cambios['cobro-medio'] = el => {
-    const form = el.form;
-    $('[data-bloque=efectivo]', form).hidden = el.value !== 'efectivo';
-    $('[data-bloque=cuenta]', form).hidden = el.value !== 'cuenta';
+    est.cobro.medioId = +el.value;
+    mostrarBloques(el.form);
     $('#dlg-error').textContent = '';
   };
   App.entradas['cobro-paga'] = el => {
-    const paga = num(el.value), total = totalCarrito(), vuelto = $('#cobro-vuelto');
-    vuelto.className = 'fs-4 fw-bold';
-    if (!(paga > 0)) vuelto.textContent = '';
-    else if (paga < total) { vuelto.textContent = `Faltan ${Formato.plata(total - paga)}`; vuelto.classList.add('text-danger'); }
-    else { vuelto.textContent = `Vuelto: ${Formato.plata(paga - total)}`; vuelto.classList.add('text-success'); }
+    const monto = num(el.form.elements.monto.value), paga = num(el.value), vuelto = $('#cobro-vuelto');
+    vuelto.className = 'fs-4 fw-bold mb-0';
+    if (!(paga > 0) || !(monto > 0)) vuelto.textContent = '';
+    else if (paga < monto) { vuelto.textContent = `Faltan ${Formato.plata(monto - paga)}`; vuelto.classList.add('text-danger'); }
+    else { vuelto.textContent = `Vuelto: ${Formato.plata(paga - monto)}`; vuelto.classList.add('text-success'); }
   };
+  App.entradas['cobro-monto'] = el => { const paga = el.form.elements.recibido; if (paga.value) App.entradas['cobro-paga'](paga); };
   App.cambios['cobro-cliente'] = el => {
     const form = el.form, info = $('#cobro-cliente-info');
     $('[data-bloque=cliente-nuevo]', form).hidden = el.value !== '__nuevo';
@@ -235,63 +328,89 @@
     if (el.value === '__nuevo') { info.textContent = ''; form.elements.cliente_nuevo.focus(); return; }
     if (!el.value) { info.textContent = ''; return; }
     const c = DB.buscar('clientes', +el.value);
-    const saldo = Logica.saldoCliente(c.id), despues = saldo + totalCarrito();
-    info.textContent = `Debe ${Formato.plata(saldo)}. Con esta compra quedaría en ${Formato.plata(despues)}`
-      + (c.limite_credito != null ? ` (límite ${Formato.plata(c.limite_credito)}).` : '.');
+    const monto = num(form.elements.monto.value) || 0;
+    const saldo = Logica.saldoCliente(c.id), despues = saldo + monto;
+    info.textContent = `Debe ${Formato.plata(saldo)}. Con esta compra quedaría en ${Formato.plata(despues)}` + (c.limite_credito != null ? ` (límite ${Formato.plata(c.limite_credito)}).` : '.');
     if (c.limite_credito != null && despues > c.limite_credito) info.classList.add('text-danger', 'fw-semibold');
   };
+  App.acciones['cobro-quitar'] = el => { est.cobro.pagos.splice(+el.dataset.i, 1); abrirCobro(); };
 
-  // Después de cobrar: según la configuración, imprime solo, pregunta o solo avisa.
-  function ventaRegistrada(v, pagaCon) {
+  // Agrega el pago cargado como parcial y deja el resto para otro medio.
+  App.acciones['cobro-agregar'] = el => {
+    const form = el.closest('form');
+    const pago = leerPago(form);
+    if (typeof pago === 'string') { $('#dlg-error').textContent = pago; return; }
+    const falta = faltaCobrar();
+    if (pago.monto >= falta) { $('#dlg-error').textContent = `Este pago cubre todo lo que falta (${Formato.plata(falta)}): tocá «Confirmar venta».`; return; }
+    if (Logica.tipoDe(pago.medio_pago_id) === 'efectivo' && pago.recibido != null && pago.recibido < pago.monto) { $('#dlg-error').textContent = 'Con cuánto paga no puede ser menos que el monto.'; return; }
+    est.cobro.pagos.push(pago);
+    est.cobro.medioId = null;
+    abrirCobro();
+  };
+
+  App.envios.cobro = (form, e, opciones = {}) => {
+    const err = $('#dlg-error');
+    const pagos = est.cobro.pagos.slice();
+    const falta = faltaCobrar();
+    if (falta > 0) {
+      const pago = leerPago(form);
+      if (typeof pago === 'string') { err.textContent = pago; return; }
+      if (pago.monto < falta) { err.textContent = `Faltan ${Formato.plata(falta - pago.monto)}. Agregá otro medio o corregí el monto.`; return; }
+      if (pago.monto > falta) { err.textContent = `El monto supera lo que falta cobrar (${Formato.plata(falta)}). El excedente en efectivo va en «Paga con».`; return; }
+      pagos.push(pago);
+    }
+    if (opciones.autorizar) {
+      const p = pagos.find(x => x.numero_operacion === opciones.autorizar.numero);
+      if (p) Object.assign(p, { autorizarRepetida: true, motivoAutorizacion: opciones.autorizar.motivo });
+    }
+    try {
+      const v = Logica.registrarVenta(est.carrito.map(r => ({ ...r })), { pagos, forzarLimite: !!opciones.forzarLimite });
+      est.carrito = [];
+      est.sel = null;
+      est.ultima = { id: v.id };
+      UI.render();
+      ventaRegistrada(v);
+    } catch (x) {
+      if (x.codigo === 'LIMITE' && confirm(`${x.message}\n\n¿Fiar igual?`)) { App.envios.cobro(form, e, { ...opciones, forzarLimite: true }); return; }
+      if (x.codigo === 'OPERACION_REPETIDA') {
+        if (!UI.esAdmin()) { err.textContent = `${x.message} Puede ser un comprobante reutilizado: no lo aceptes y avisá al administrador.`; return; }
+        const numero = (x.message.match(/operación (\S+)/) || [])[1];
+        const motivo = prompt(`${x.message}\n\nPuede ser un comprobante reutilizado. Si verificaste que es una transferencia distinta, escribí el motivo para autorizarla:`);
+        if (motivo && motivo.trim()) { App.envios.cobro(form, e, { ...opciones, autorizar: { numero, motivo } }); return; }
+        err.textContent = x.message;
+        return;
+      }
+      err.textContent = x.message;
+    }
+  };
+
+  // Después de cobrar: resumen de pagos, vuelto y, según la configuración, el ticket.
+  function ventaRegistrada(v) {
     const { alVender } = Logica.config('ticket');
-    const vuelto = pagaCon ? pagaCon - v.total : null;
-    if (alVender === 'siempre') Impresora.ticketVenta(v.id, { pagaCon });
-    if (alVender !== 'preguntar') {
+    const pagos = Logica.pagosDeVenta(v.id);
+    const vuelto = pagos.reduce((s, p) => s + (p.vuelto || 0), 0);
+    const pendiente = pagos.some(p => p.estado_verificacion === 'pendiente');
+    if (alVender === 'siempre') Impresora.ticketVenta(v.id);
+    if (alVender !== 'preguntar' && !pendiente) {
       UI.cerrarDialogo();
-      UI.avisar(`Venta de ${Formato.plata(v.total)} registrada${vuelto != null ? `. Vuelto: ${Formato.plata(vuelto)}` : ''}`);
+      UI.avisar(`Venta de ${Formato.plata(v.total)} registrada${vuelto ? `. Vuelto: ${Formato.plata(vuelto)}` : ''}`);
       return;
     }
     UI.abrirDialogo({
       titulo: 'Venta registrada',
       cuerpo: `<div class="text-center py-2">
           <i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i>
-          <div class="fs-5 mt-2">Total ${Formato.plata(v.total)} <span class="text-body-secondary">· ${Formato.medio(v.medio_pago)}</span></div>
-          ${vuelto != null ? `<div class="display-6 fw-bold mt-2">Vuelto ${Formato.plata(vuelto)}</div>` : ''}
-        </div>`,
-      pie: `<button type="button" class="btn btn-outline-secondary" data-accion="venta-imprimir-y-cerrar" data-id="${v.id}"><i class="bi bi-printer"></i> Imprimir ticket</button>
+          <div class="fs-5 mt-2">Total ${Formato.plata(v.total)}</div>
+          <div class="text-body-secondary">${esc(Logica.textoPagos(v.id))}</div>
+          ${vuelto ? `<div class="display-6 fw-bold mt-2">Vuelto ${Formato.plata(vuelto)}</div>` : ''}
+        </div>
+        ${pendiente ? '<div class="alert alert-warning mb-0"><i class="bi bi-hourglass-split"></i> La transferencia quedó <strong>pendiente de verificación</strong>. Revisala en «Transferencias» apenas puedas.</div>' : ''}`,
+      pie: `${alVender !== 'nunca' ? `<button type="button" class="btn btn-outline-secondary" data-accion="venta-imprimir-y-cerrar" data-id="${v.id}"><i class="bi bi-printer"></i> Imprimir ticket</button>` : ''}
         <button type="button" class="btn btn-primary" data-bs-dismiss="modal" data-foco>Listo</button>`
     }, { ancho: 'chico' });
   }
   App.acciones['venta-imprimir-y-cerrar'] = el => {
-    Impresora.ticketVenta(+el.dataset.id, { pagaCon: est.ultima && est.ultima.id === +el.dataset.id ? est.ultima.pagaCon : null });
+    Impresora.ticketVenta(+el.dataset.id);
     UI.cerrarDialogo();
-  };
-
-  App.envios.cobro = (form, e, forzarLimite = false) => {
-    const f = form.elements, medio = f.medio.value, err = $('#dlg-error');
-    let clienteId = null;
-    if (medio === 'cuenta') {
-      if (f.cliente.value === '__nuevo') {
-        try {
-          const nuevo = Logica.guardarCliente({ nombre: f.cliente_nuevo.value });
-          clienteId = nuevo.id;
-          f.cliente.insertAdjacentHTML('beforeend', `<option value="${nuevo.id}">${esc(nuevo.nombre)}</option>`);
-          f.cliente.value = String(nuevo.id);
-          $('[data-bloque=cliente-nuevo]', form).hidden = true;
-        } catch (x) { err.textContent = x.message; return; }
-      } else clienteId = f.cliente.value ? +f.cliente.value : null;
-    }
-    const pagaCon = num(f.paga_con.value);
-    try {
-      const v = Logica.registrarVenta(est.carrito.map(r => ({ ...r })), { medio_pago: medio, cliente_id: clienteId, forzarLimite });
-      est.carrito = [];
-      est.sel = null;
-      est.ultima = { id: v.id, pagaCon: medio === 'efectivo' && pagaCon >= v.total ? pagaCon : null };
-      UI.render();
-      ventaRegistrada(v, est.ultima.pagaCon);
-    } catch (x) {
-      if (x.codigo === 'LIMITE' && confirm(`${x.message}\n\n¿Fiar igual?`)) { App.envios.cobro(form, e, true); return; }
-      err.textContent = x.message;
-    }
   };
 })();

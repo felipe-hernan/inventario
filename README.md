@@ -25,6 +25,17 @@ Usuarios de prueba: `admin` / `admin123` y `laura` / `laura123`.
 
 `css/tema.css` solo cambia los colores a los de la marca (verde y mostaza) y agrega las piezas propias que Bootstrap no trae: el ticket con borde de papel, el estado de la caja y el centrado en monitores anchos. **Si se quita ese archivo, se ve el Bootstrap original.**
 
+## Pagos y transferencias
+
+- **Pago mixto:** al cobrar se pueden combinar medios (por ejemplo, una parte por transferencia y el resto en efectivo). El sistema propone siempre lo que falta y calcula el vuelto.
+- **Medios de pago configurables** (Configuración): cada cuenta o posnet es un medio («Transferencia Banco Nación», «Débito Payway»…). Se pueden agregar, ordenar y desactivar sin tocar el código. Los tipos (efectivo, débito, crédito, transferencia, fiado) son fijos.
+- **Transferencias con verificación** para evitar comprobantes falsos:
+  - Al cobrar se carga el número de operación; si ya se usó en esa cuenta, se rechaza (el administrador puede autorizarlo con un motivo).
+  - Se verifican en la app de la cuenta del negocio. Por defecto, el vendedor tiene que marcarlas como acreditadas antes de confirmar; se puede permitir verificarlas después.
+  - Pantalla **Transferencias**: pendientes, verificadas y rechazadas; búsqueda por número o monto; totales por cuenta; historial de cada cambio.
+  - Rechazar es del administrador, con motivo. La venta se resuelve cobrándola con otro medio o pasándola a la cuenta de un cliente.
+- **Caja:** el efectivo esperado sale de los pagos en efectivo, y los cobros por medio muestran lo verificado, lo pendiente y lo rechazado. El cierre avisa si quedan transferencias sin verificar.
+
 ## Lector de código de barras, ticketera y balanza
 
 Se configura en **Configuración** (solo administrador).
@@ -56,7 +67,8 @@ css/tema.css                       Equivale a wwwroot/css/site.css
 js/db.js, js/logica.js             En MVC pasan al servidor (modelos, servicios y controladores)
 js/ui.js                           Piezas compartidas (en Razor serían partial views o tag helpers)
 js/hardware.js                     Lector de código de barras e impresora de tickets
-js/vistas/*.js                     Una pantalla por archivo (en MVC, una vista .cshtml por acción)
+js/vistas/*.js                     Una pantalla por archivo (en MVC, una vista .cshtml por acción);
+                                   transferencias.js es la pantalla de verificación
 docs/modelo.sql                    Modelo de base de datos
 ```
 

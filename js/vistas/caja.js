@@ -51,13 +51,27 @@
           ${c.observacion ? `<p class="small text-body-secondary mt-2 mb-0">Nota: ${esc(c.observacion)}</p>` : ''}
         </div></section></div>
         <div class="col-md-6 col-xl-4"><section class="card shadow-sm h-100"><div class="card-body">
-          <h2 class="h6"><i class="bi bi-credit-card"></i> Ventas del turno</h2>
+          <h2 class="h6"><i class="bi bi-credit-card"></i> Cobros del turno por medio</h2>
           <ul class="list-group list-group-flush cuentas">
-            ${r.porMedio.map(m => `<li class="list-group-item"><span>${m.medio.nombre}${m.cantidad ? ` <span class="badge rounded-pill text-bg-light border">${m.cantidad}</span>` : ''}</span><span>${Formato.plata(m.total)}</span></li>`).join('')}
+            ${r.porMedio.map(m => {
+              const esTransf = m.medio.tipo === 'transferencia';
+              const total = m.ventas.total + m.cobros.total;
+              const cantidad = m.ventas.cantidad + m.cobros.cantidad;
+              const pendiente = m.ventas.pendiente + m.cobros.pendiente;
+              const rechazado = m.ventas.rechazado + m.cobros.rechazado;
+              return `<li class="list-group-item flex-wrap">
+                <span class="d-flex justify-content-between gap-2 w-100"><span>${esc(m.medio.nombre)}${cantidad ? ` <span class="badge rounded-pill text-bg-light border">${cantidad}</span>` : ''}</span><span class="text-nowrap">${Formato.plata(total)}</span></span>
+                ${esTransf && (pendiente || rechazado) ? `<span class="w-100 small">
+                  ${pendiente ? `<span class="text-warning-emphasis"><i class="bi bi-hourglass-split"></i> ${Formato.plata(pendiente)} sin verificar</span>` : ''}
+                  ${rechazado ? `<span class="text-danger ms-2"><i class="bi bi-x-circle"></i> ${Formato.plata(rechazado)} rechazado</span>` : ''}</span>` : ''}
+                ${m.cobros.cantidad ? `<span class="w-100 small text-body-secondary">${Formato.plata(m.cobros.total)} de cobros de fiado</span>` : ''}
+              </li>`;
+            }).join('')}
             <li class="list-group-item total"><span>Total vendido</span><span>${Formato.plata(r.total)}</span></li>
             ${UI.esAdmin() ? `<li class="list-group-item"><span>Ganancia</span><span>${Formato.plata(r.ganancia)}</span></li>` : ''}
             ${r.cobrosTotal ? `<li class="list-group-item"><span>Cobros de fiado</span><span>${Formato.plata(r.cobrosTotal)}</span></li>` : ''}
           </ul>
+          ${r.transferenciasPendientes.cantidad && c.estado === 'abierta' ? `<a class="btn btn-sm btn-outline-warning mt-2" href="#transferencias"><i class="bi bi-hourglass-split"></i> Verificar ${r.transferenciasPendientes.cantidad} ${r.transferenciasPendientes.cantidad === 1 ? 'transferencia' : 'transferencias'}</a>` : ''}
         </div></section></div>
         <div class="col-md-12 col-xl-4"><section class="card shadow-sm h-100"><div class="card-body">
           <h2 class="h6"><i class="bi bi-folder2"></i> Por categoría</h2>
@@ -123,6 +137,9 @@
       titulo: 'Cerrar caja', subtitulo: 'Contá los billetes y las monedas que hay en la caja.', enviar: 'caja-cerrar',
       atributos: `data-esperado="${r.efectivoEsperado}"`,
       cuerpo: `<div class="text-center mb-3"><div class="text-body-secondary">Debería haber</div><div class="display-6 fw-bold">${Formato.plata(r.efectivoEsperado)}</div></div>
+        ${r.transferenciasPendientes.cantidad ? `<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i>
+          Hay ${r.transferenciasPendientes.cantidad} ${r.transferenciasPendientes.cantidad === 1 ? 'transferencia' : 'transferencias'} sin verificar por ${Formato.plata(r.transferenciasPendientes.total)}.
+          No cambian el efectivo, pero conviene verificarlas antes de cerrar. <a href="#transferencias">Ir a verificar</a></div>` : ''}
         ${H.error()}
         ${H.campo('Efectivo contado', '<div class="input-group input-group-lg"><span class="input-group-text">$</span><input class="form-control" name="contado" type="number" min="0" step="1" inputmode="numeric" data-input="cierre-contado" data-foco></div>')}
         <p class="fs-5" id="cierre-diferencia" aria-live="polite"></p>

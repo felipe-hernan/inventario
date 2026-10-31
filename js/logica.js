@@ -4,13 +4,17 @@
  */
 
 // ================= Constantes =================
-const MEDIOS_PAGO = [
-  { id: 'efectivo', nombre: 'Efectivo' },
-  { id: 'debito', nombre: 'Débito' },
-  { id: 'credito', nombre: 'Crédito' },
-  { id: 'transferencia', nombre: 'Transferencia o QR' },
-  { id: 'cuenta', nombre: 'Fiado' }
-];
+// Tipos de pago: son fijos porque cada uno tiene su comportamiento.
+// Los medios concretos (cada cuenta, cada posnet) se cargan en la tabla medios_pago.
+const TIPOS_PAGO = {
+  efectivo: 'Efectivo',
+  debito: 'Débito',
+  credito: 'Crédito',
+  transferencia: 'Transferencia o QR',
+  cuenta: 'Fiado'
+};
+
+const ESTADOS_VERIFICACION = { pendiente: 'Pendiente', verificada: 'Verificada', rechazada: 'Rechazada' };
 
 const ROLES = {
   admin: 'Administrador',
@@ -19,8 +23,8 @@ const ROLES = {
 
 // Pantallas que puede abrir cada rol. El administrador ve todo.
 const PERMISOS = {
-  admin: ['inicio', 'vender', 'clientes', 'productos', 'mercaderia', 'caja', 'informes', 'usuarios', 'configuracion'],
-  vendedor: ['inicio', 'vender', 'clientes', 'mercaderia', 'caja']
+  admin: ['inicio', 'vender', 'clientes', 'productos', 'mercaderia', 'caja', 'transferencias', 'informes', 'usuarios', 'configuracion'],
+  vendedor: ['inicio', 'vender', 'clientes', 'mercaderia', 'caja', 'transferencias']
 };
 
 const MOTIVOS_AJUSTE = {
@@ -72,7 +76,7 @@ const Formato = {
   fechaCorta(iso) { const [, m, d] = iso.slice(0, 10).split('-'); return `${d}/${m}`; },
   hora(fh) { return fh.slice(11, 16); },
   fechaHora(fh) { return `${Formato.fechaCorta(fh)} ${Formato.hora(fh)}`; },
-  medio(id) { return (MEDIOS_PAGO.find(m => m.id === id) || {}).nombre || id; },
+  medio(id) { const m = DB.buscar('medios_pago', id); return m ? m.nombre : '—'; },
   vence(dias) {
     if (dias === 0) return 'vence hoy';
     if (dias === 1) return 'vence mañana';
@@ -428,22 +432,266 @@ const Logica = {
       usuario_cierre_id: Logica.usuarioActualId
     }));
   },
+  // El efectivo esperado se calcula con los PAGOS en efectivo del turno (no con las ventas),
+  // así una venta mixta solo suma al arqueo la parte que se pagó en efectivo.
   resumenCaja(caja) {
     const ventas = DB.todos('ventas').filter(v => v.caja_id === caja.id);
     const agregado = Logica._agregarVentas(ventas);
+    const pagos = DB.todos('pagos_venta').filter(p => p.caja_id === caja.id);
     const cobros = DB.todos('pagos_clientes').filter(p => p.caja_id === caja.id);
     const movimientos = DB.todos('movimientos_caja').filter(m => m.caja_id === caja.id)
       .sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora));
     const suma = lista => lista.reduce((s, x) => s + x.monto, 0);
-    const ventasEfectivo = agregado.porMedio.find(m => m.medio.id === 'efectivo').total;
-    const cobrosEfectivo = suma(cobros.filter(c => c.medio_pago === 'efectivo'));
+    const esEfectivo = p => Logica.tipoDe(p.medio_pago_id) === 'efectivo';
+    const ventasEfectivo = suma(pagos.filter(esEfectivo));
+    const cobrosValidos = cobros.filter(c => c.estado_verificacion !== 'rechazada');
+    const cobrosEfectivo = suma(cobrosValidos.filter(esEfectivo));
     const entradas = suma(movimientos.filter(m => m.tipo === 'entrada'));
     const salidas = suma(movimientos.filter(m => m.tipo === 'salida'));
+    const transferencias = [...pagos, ...cobros].filter(p => Logica.tipoDe(p.medio_pago_id) === 'transferencia');
+    const pendientes = transferencias.filter(p => p.estado_verificacion === 'pendiente');
     return {
-      caja, ...agregado, cobros, cobrosEfectivo, cobrosTotal: suma(cobros),
+      caja, ...agregado, porMedio: Logica._porMedio(pagos, cobros), cobros: cobrosValidos,
+      cobrosEfectivo, cobrosTotal: suma(cobrosValidos),
       movimientos, entradas, salidas, ventasEfectivo,
+      transferenciasPendientes: { cantidad: pendientes.length, total: suma(pendientes) },
       efectivoEsperado: caja.dinero_inicial + ventasEfectivo + cobrosEfectivo + entradas - salidas
     };
+  },
+
+  // ---------- Medios de pago (catálogo configurable) ----------
+  mediosPago({ soloActivos = false } = {}) {
+    return DB.todos('medios_pago').filter(m => !soloActivos || m.activo).sort((a, b) => a.orden - b.orden);
+  },
+  tipoDe(medioId) {
+    const m = DB.buscar('medios_pago', medioId);
+    return m ? m.tipo : null;
+  },
+  medioUsado(id) {
+    return DB.todos('pagos_venta').some(p => p.medio_pago_id === id) || DB.todos('pagos_clientes').some(p => p.medio_pago_id === id);
+  },
+  guardarMedio({ nombre, tipo }, id = null) {
+    const limpio = String(nombre || '').trim();
+    if (!limpio) throw error('Escribí el nombre del medio de pago.');
+    if (!TIPOS_PAGO[tipo]) throw error('Elegí el tipo.');
+    if (DB.todos('medios_pago').some(m => m.id !== id && normalizar(m.nombre) === normalizar(limpio))) throw error(`Ya existe «${limpio}».`);
+    const existente = id ? DB.buscar('medios_pago', id) : null;
+    if (existente && existente.tipo !== tipo && Logica.medioUsado(id)) throw error('No se puede cambiar el tipo de un medio que ya se usó. Creá uno nuevo.');
+    if (tipo === 'cuenta' && DB.todos('medios_pago').some(m => m.id !== id && m.tipo === 'cuenta')) throw error('El fiado es uno solo: ya existe.');
+    return DB.transaccion(() => {
+      if (existente) return Object.assign(existente, { nombre: limpio, tipo });
+      const orden = Math.max(0, ...DB.todos('medios_pago').map(m => m.orden)) + 1;
+      return DB.insertar('medios_pago', { nombre: limpio, tipo, activo: true, orden });
+    });
+  },
+  cambiarActivoMedio(id, activo) {
+    const m = DB.buscar('medios_pago', id);
+    if (!activo && m.tipo === 'efectivo' && !DB.todos('medios_pago').some(x => x.id !== id && x.tipo === 'efectivo' && x.activo)) {
+      throw error('Tiene que quedar un medio de efectivo activo: la caja depende de él.');
+    }
+    return DB.transaccion(() => Object.assign(m, { activo }));
+  },
+  moverMedio(id, direccion) {
+    const lista = Logica.mediosPago();
+    const i = lista.findIndex(m => m.id === id);
+    const j = i + direccion;
+    if (i < 0 || j < 0 || j >= lista.length) return;
+    return DB.transaccion(() => { const o = lista[i].orden; lista[i].orden = lista[j].orden; lista[j].orden = o; });
+  },
+  borrarMedio(id) {
+    if (Logica.medioUsado(id)) throw error('Ese medio ya tiene cobros registrados: desactivalo en lugar de borrarlo.');
+    const m = DB.buscar('medios_pago', id);
+    if (m.tipo === 'efectivo' && !DB.todos('medios_pago').some(x => x.id !== id && x.tipo === 'efectivo' && x.activo)) {
+      throw error('Tiene que quedar un medio de efectivo activo.');
+    }
+    return DB.transaccion(() => DB.borrar('medios_pago', id));
+  },
+
+  // ---------- Pagos y verificación de transferencias ----------
+  puedeVerificar() {
+    const u = DB.buscar('usuarios', Logica.usuarioActualId);
+    return !!u && (u.rol === 'admin' || Logica.config('transferencias').vendedorVerifica);
+  },
+  esAdminActual() {
+    const u = DB.buscar('usuarios', Logica.usuarioActualId);
+    return !!u && u.rol === 'admin';
+  },
+  pagosDeVenta(ventaId) {
+    return DB.todos('pagos_venta').filter(p => p.venta_id === ventaId).sort((a, b) => a.id - b.id);
+  },
+  // pagada / pendiente (alguna transferencia sin verificar) / problema (algún pago rechazado sin resolver)
+  estadoVenta(ventaId) {
+    const pagos = Logica.pagosDeVenta(ventaId);
+    if (pagos.some(p => p.estado_verificacion === 'rechazada' && !p.resuelto_con)) return 'problema';
+    if (pagos.some(p => p.estado_verificacion === 'pendiente')) return 'pendiente';
+    return 'pagada';
+  },
+  textoPagos(ventaId) {
+    return Logica.pagosDeVenta(ventaId).map(p => `${Formato.medio(p.medio_pago_id)} ${Formato.plata(p.monto)}${p.estado_verificacion && p.estado_verificacion !== 'verificada' ? ` (${ESTADOS_VERIFICACION[p.estado_verificacion].toLowerCase()})` : ''}`).join(' + ');
+  },
+
+  // Busca si un número de operación ya se usó en esa cuenta (en ventas o en cobros de fiado).
+  _operacionUsada(medioId, numero) {
+    const n = String(numero).trim();
+    const enVenta = DB.todos('pagos_venta').find(p => p.medio_pago_id === medioId && p.numero_operacion === n);
+    if (enVenta) return `la venta N.º ${enVenta.venta_id}`;
+    const enCobro = DB.todos('pagos_clientes').find(p => p.medio_pago_id === medioId && p.numero_operacion === n);
+    if (enCobro) return `un cobro a ${Logica.nombreCliente(enCobro.cliente_id)}`;
+    return null;
+  },
+  nombreCliente(id) { const c = id ? DB.buscar('clientes', id) : null; return c ? c.nombre : ''; },
+
+  // Arma los campos de un pago según su tipo. p: { medio_pago_id, monto, recibido, cupon, cuotas,
+  // numero_operacion, titular, acreditada, autorizarRepetida, motivoAutorizacion, cliente_id }
+  _armarPago(p, fechaHora) {
+    const medio = DB.buscar('medios_pago', p.medio_pago_id);
+    if (!medio || !medio.activo) throw error('Elegí un medio de pago activo.');
+    if (!Number.isInteger(p.monto) || p.monto <= 0) throw error(`El monto de ${medio.nombre} tiene que ser mayor a 0, sin centavos.`);
+    const fila = {
+      medio_pago_id: medio.id, monto: p.monto, recibido: null, vuelto: null, cupon: null, cuotas: null,
+      numero_operacion: null, titular: null, cliente_id: null,
+      estado_verificacion: null, metodo_verificacion: null, verificado_por: null, verificado_en: null,
+      motivo_rechazo: null, autorizado_por: null, motivo_autorizacion: null, resuelto_con: null
+    };
+    if (medio.tipo === 'efectivo' && p.recibido != null && !Number.isNaN(p.recibido)) {
+      if (!Number.isInteger(p.recibido) || p.recibido < p.monto) throw error(`Con cuánto paga tiene que ser al menos ${Formato.plata(p.monto)}.`);
+      fila.recibido = p.recibido;
+      fila.vuelto = p.recibido - p.monto;
+    }
+    if (medio.tipo === 'debito' || medio.tipo === 'credito') {
+      fila.cupon = String(p.cupon || '').trim() || null;
+      if (medio.tipo === 'credito') {
+        fila.cuotas = p.cuotas || 1;
+        if (!Number.isInteger(fila.cuotas) || fila.cuotas < 1 || fila.cuotas > 24) throw error('Las cuotas tienen que ser entre 1 y 24.');
+      }
+    }
+    if (medio.tipo === 'transferencia') {
+      const numero = String(p.numero_operacion || '').trim();
+      if (!numero) throw error(`Cargá el número de operación de ${medio.nombre}.`);
+      const usada = Logica._operacionUsada(medio.id, numero);
+      if (usada) {
+        if (!p.autorizarRepetida) throw error(`El número de operación ${numero} ya se usó en ${usada}.`, 'OPERACION_REPETIDA');
+        if (!Logica.esAdminActual()) throw error('Solo el administrador puede autorizar un número de operación repetido.');
+        if (!String(p.motivoAutorizacion || '').trim()) throw error('Escribí por qué se autoriza el número repetido.');
+        fila.autorizado_por = Logica.usuarioActualId;
+        fila.motivo_autorizacion = String(p.motivoAutorizacion).trim();
+      }
+      const t = Logica.config('transferencias');
+      if (p.acreditada && !Logica.puedeVerificar()) throw error('No tenés permiso para verificar transferencias. Pedíselo al administrador.');
+      if (!p.acreditada && t.modo === 'antes' && !Logica.esAdminActual()) {
+        throw error('Antes de confirmar, verificá en la cuenta del negocio que la transferencia esté acreditada y marcalo.');
+      }
+      fila.numero_operacion = numero;
+      fila.titular = String(p.titular || '').trim() || null;
+      Object.assign(fila, p.acreditada
+        ? { estado_verificacion: 'verificada', metodo_verificacion: 'manual', verificado_por: Logica.usuarioActualId, verificado_en: fechaHora }
+        : { estado_verificacion: 'pendiente' });
+    }
+    if (medio.tipo === 'cuenta') {
+      const c = p.cliente_id ? DB.buscar('clientes', p.cliente_id) : null;
+      if (!c || !c.activo) throw error('Para fiar, elegí el cliente.');
+      fila.cliente_id = c.id;
+    }
+    return fila;
+  },
+  _historial(origen, pago, anterior, nuevo, fechaHora, motivo = null) {
+    DB.insertar('verificaciones_pago', {
+      origen, pago_id: pago.id, estado_anterior: anterior, estado_nuevo: nuevo, metodo: 'manual',
+      usuario_id: Logica.usuarioActualId, fecha_hora: fechaHora, motivo
+    });
+  },
+  _tablaDe(origen) { return origen === 'cobro' ? 'pagos_clientes' : 'pagos_venta'; },
+
+  verificarPago(origen, id, fechaHora = Fechas.ahora()) {
+    if (!Logica.puedeVerificar()) throw error('No tenés permiso para verificar transferencias.');
+    return DB.transaccion(() => {
+      const p = DB.buscar(Logica._tablaDe(origen), id);
+      if (!p || p.estado_verificacion !== 'pendiente') throw error('Esa transferencia ya no está pendiente.');
+      Object.assign(p, { estado_verificacion: 'verificada', metodo_verificacion: 'manual', verificado_por: Logica.usuarioActualId, verificado_en: fechaHora });
+      Logica._historial(origen, p, 'pendiente', 'verificada', fechaHora);
+      return p;
+    });
+  },
+  // Rechazar (o revertir una verificada) es solo del administrador, y siempre con motivo.
+  rechazarPago(origen, id, motivo, fechaHora = Fechas.ahora()) {
+    if (!Logica.esAdminActual()) throw error('Solo el administrador puede rechazar transferencias.');
+    const m = String(motivo || '').trim();
+    if (!m) throw error('Escribí el motivo del rechazo.');
+    return DB.transaccion(() => {
+      const p = DB.buscar(Logica._tablaDe(origen), id);
+      if (!p || !['pendiente', 'verificada'].includes(p.estado_verificacion)) throw error('Esa transferencia ya fue rechazada.');
+      const anterior = p.estado_verificacion;
+      Object.assign(p, { estado_verificacion: 'rechazada', metodo_verificacion: 'manual', verificado_por: Logica.usuarioActualId, verificado_en: fechaHora, motivo_rechazo: m });
+      Logica._historial(origen, p, anterior, 'rechazada', fechaHora, m);
+      return p;
+    });
+  },
+  // Un pago de venta rechazado se resuelve con un pago nuevo por el mismo monto (otro medio o fiado).
+  resolverRechazo(pagoId, datos, fechaHora = Fechas.ahora()) {
+    const rechazado = DB.buscar('pagos_venta', pagoId);
+    if (!rechazado || rechazado.estado_verificacion !== 'rechazada' || rechazado.resuelto_con) throw error('Ese pago no está pendiente de resolver.');
+    const medio = DB.buscar('medios_pago', datos.medio_pago_id);
+    if (!medio) throw error('Elegí cómo se resuelve.');
+    const caja = Logica.cajaAbierta();
+    if (!caja && medio.tipo !== 'cuenta') throw error('Abrí la caja para cobrar.');
+    return DB.transaccion(() => {
+      const fila = Logica._armarPago({ ...datos, monto: rechazado.monto }, fechaHora);
+      const nuevo = DB.insertar('pagos_venta', { ...fila, venta_id: rechazado.venta_id, caja_id: caja ? caja.id : null, fecha_hora: fechaHora, usuario_id: Logica.usuarioActualId });
+      rechazado.resuelto_con = nuevo.id;
+      if (medio.tipo === 'cuenta') DB.buscar('ventas', rechazado.venta_id).cliente_id = fila.cliente_id;
+      return nuevo;
+    });
+  },
+
+  // Lista unificada de transferencias (de ventas y de cobros de fiado) para la pantalla de verificación.
+  transferencias({ estado = null, medioId = null, desde = null, hasta = null, texto = '' } = {}) {
+    const ahora = Fechas.ahora();
+    const minutos = fh => Math.max(0, Math.round((new Date(ahora) - new Date(fh)) / 60000));
+    const filas = [
+      ...DB.todos('pagos_venta').map(p => ({ origen: 'venta', pago: p, referencia: `Venta N.º ${p.venta_id}` })),
+      ...DB.todos('pagos_clientes').map(p => ({ origen: 'cobro', pago: p, referencia: `Cobro de fiado: ${Logica.nombreCliente(p.cliente_id)}` }))
+    ].filter(f => Logica.tipoDe(f.pago.medio_pago_id) === 'transferencia')
+      .map(f => ({ ...f, medio: DB.buscar('medios_pago', f.pago.medio_pago_id), cajero: Logica.nombreUsuario(f.pago.usuario_id),
+        minutosPendiente: f.pago.estado_verificacion === 'pendiente' ? minutos(f.pago.fecha_hora) : null }));
+    const t = normalizar(texto);
+    return filas.filter(f =>
+      (!estado || f.pago.estado_verificacion === estado) &&
+      (!medioId || f.pago.medio_pago_id === medioId) &&
+      (!desde || f.pago.fecha_hora.slice(0, 10) >= desde) &&
+      (!hasta || f.pago.fecha_hora.slice(0, 10) <= hasta) &&
+      (!t || normalizar(f.pago.numero_operacion).includes(t) || String(f.pago.monto) === t.replace(/\D/g, '') ||
+        normalizar(f.pago.titular).includes(t) || normalizar(f.referencia).includes(t))
+    ).sort((a, b) => b.pago.fecha_hora.localeCompare(a.pago.fecha_hora));
+  },
+  totalesTransferencias(filas) {
+    const porCuenta = new Map();
+    filas.forEach(f => {
+      const t = porCuenta.get(f.medio.id) || { medio: f.medio, verificada: 0, pendiente: 0, rechazada: 0 };
+      t[f.pago.estado_verificacion] += f.pago.monto;
+      porCuenta.set(f.medio.id, t);
+    });
+    return [...porCuenta.values()];
+  },
+  historialPago(origen, id) {
+    return DB.todos('verificaciones_pago').filter(h => h.origen === origen && h.pago_id === id).sort((a, b) => a.id - b.id);
+  },
+
+  // Totales por medio de pago: pagos de ventas y cobros de fiado, con transferencias separadas por estado.
+  _porMedio(pagos, cobros) {
+    return Logica.mediosPago().map(m => {
+      const de = lista => lista.filter(p => p.medio_pago_id === m.id);
+      const dato = lista => {
+        const validos = lista.filter(p => p.estado_verificacion !== 'rechazada');
+        return {
+          cantidad: validos.length,
+          total: validos.reduce((s, p) => s + p.monto, 0),
+          verificado: lista.filter(p => p.estado_verificacion === 'verificada').reduce((s, p) => s + p.monto, 0),
+          pendiente: lista.filter(p => p.estado_verificacion === 'pendiente').reduce((s, p) => s + p.monto, 0),
+          rechazado: lista.filter(p => p.estado_verificacion === 'rechazada').reduce((s, p) => s + p.monto, 0)
+        };
+      };
+      return { medio: m, ventas: dato(de(pagos)), cobros: dato(de(cobros)) };
+    }).filter(x => x.medio.activo || x.ventas.cantidad || x.cobros.cantidad || x.ventas.rechazado || x.cobros.rechazado);
   },
 
   // ---------- Clientes y fiado ----------
@@ -465,54 +713,56 @@ const Logica = {
     if (!activo && Logica.saldoCliente(id) > 0) throw error('No se puede dar de baja: todavía tiene deuda.');
     return DB.transaccion(() => Object.assign(DB.buscar('clientes', id), { activo }));
   },
+  // Deuda = lo fiado (pagos de tipo fiado) menos lo que pagó (sin contar transferencias rechazadas).
   saldoCliente(id) {
-    const compras = DB.todos('ventas').filter(v => v.cliente_id === id && v.medio_pago === 'cuenta').reduce((s, v) => s + v.total, 0);
-    const pagos = DB.todos('pagos_clientes').filter(p => p.cliente_id === id).reduce((s, p) => s + p.monto, 0);
+    const compras = DB.todos('pagos_venta').filter(p => p.cliente_id === id && Logica.tipoDe(p.medio_pago_id) === 'cuenta').reduce((s, p) => s + p.monto, 0);
+    const pagos = DB.todos('pagos_clientes').filter(p => p.cliente_id === id && p.estado_verificacion !== 'rechazada').reduce((s, p) => s + p.monto, 0);
     return compras - pagos;
   },
   estadoCuenta(id) {
-    const compras = DB.todos('ventas').filter(v => v.cliente_id === id && v.medio_pago === 'cuenta').map(v => ({
-      fecha_hora: v.fecha_hora, tipo: 'compra', monto: v.total,
-      detalle: `Compra N.º ${v.id}: ${Logica.detalleTexto(v.id)}`
-    }));
+    const compras = DB.todos('pagos_venta').filter(p => p.cliente_id === id && Logica.tipoDe(p.medio_pago_id) === 'cuenta').map(p => {
+      const v = DB.buscar('ventas', p.venta_id);
+      return { fecha_hora: p.fecha_hora, tipo: 'compra', monto: p.monto,
+        detalle: `Compra N.º ${v.id}${p.monto !== v.total ? ` (fiado ${Formato.plata(p.monto)} de ${Formato.plata(v.total)})` : ''}: ${Logica.detalleTexto(v.id)}` };
+    });
     const pagos = DB.todos('pagos_clientes').filter(p => p.cliente_id === id).map(p => ({
-      fecha_hora: p.fecha_hora, tipo: 'pago', monto: p.monto,
-      detalle: `Pago en ${Formato.medio(p.medio_pago).toLowerCase()}${p.nota ? ` (${p.nota})` : ''}`
+      fecha_hora: p.fecha_hora, tipo: p.estado_verificacion === 'rechazada' ? 'rechazado' : 'pago', monto: p.monto, estado: p.estado_verificacion,
+      detalle: `Pago en ${Formato.medio(p.medio_pago_id).toLowerCase()}${p.numero_operacion ? `, operación ${p.numero_operacion}` : ''}${p.estado_verificacion === 'pendiente' ? ' (transferencia sin verificar)' : ''}${p.estado_verificacion === 'rechazada' ? ` (RECHAZADA: ${p.motivo_rechazo})` : ''}`
     }));
     let saldo = 0;
     return [...compras, ...pagos]
       .sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora) || (a.tipo === 'compra' ? -1 : 1))
-      .map(m => { saldo += m.tipo === 'compra' ? m.monto : -m.monto; return { ...m, saldo }; })
+      .map(m => { if (m.tipo === 'compra') saldo += m.monto; else if (m.tipo === 'pago') saldo -= m.monto; return { ...m, saldo }; })
       .reverse();
   },
   deudores() {
     return Logica.clientesActivos().map(c => ({ cliente: c, saldo: Logica.saldoCliente(c.id) }))
       .filter(x => x.saldo > 0).sort((a, b) => b.saldo - a.saldo);
   },
-  registrarPago(clienteId, { monto, medio_pago = 'efectivo', nota = '' }, fechaHora = Fechas.ahora()) {
+  // Cobro de una deuda de fiado. datos: { monto, medio_pago_id, numero_operacion, titular, acreditada, ... }
+  registrarPago(clienteId, datos, fechaHora = Fechas.ahora()) {
     const caja = Logica.cajaAbierta();
     if (!caja) throw error('Abrí la caja para registrar cobros.');
     const c = DB.buscar('clientes', clienteId);
     if (!c) throw error('El cliente no existe.');
-    if (!MEDIOS_PAGO.some(m => m.id === medio_pago) || medio_pago === 'cuenta') throw error('Elegí cómo pagó.');
-    if (!Number.isInteger(monto) || monto <= 0) throw error('El monto tiene que ser mayor a 0, sin centavos.');
+    if (Logica.tipoDe(datos.medio_pago_id) === 'cuenta') throw error('Elegí cómo pagó.');
     const saldo = Logica.saldoCliente(clienteId);
-    if (monto > saldo) throw error(`${c.nombre} debe ${Formato.plata(saldo)}. No puede pagar más que eso.`);
-    return DB.transaccion(() => DB.insertar('pagos_clientes', {
-      cliente_id: clienteId, caja_id: caja.id, fecha_hora: fechaHora, monto, medio_pago, nota: String(nota).trim(),
-      usuario_id: Logica.usuarioActualId
-    }));
+    if (datos.monto > saldo) throw error(`${c.nombre} debe ${Formato.plata(saldo)}. No puede pagar más que eso.`);
+    return DB.transaccion(() => {
+      const fila = Logica._armarPago(datos, fechaHora);
+      const pago = DB.insertar('pagos_clientes', { ...fila, cliente_id: clienteId, caja_id: caja.id, fecha_hora: fechaHora, usuario_id: Logica.usuarioActualId });
+      if (pago.estado_verificacion === 'verificada') Logica._historial('cobro', pago, null, 'verificada', fechaHora);
+      return pago;
+    });
   },
 
   // ---------- Ventas ----------
   // items: [{ producto_id, cantidad }]
-  // opciones: { medio_pago, cliente_id, forzarLimite, fechaHora }
-  registrarVenta(items, { medio_pago = 'efectivo', cliente_id = null, forzarLimite = false, fechaHora = Fechas.ahora() } = {}) {
+  // opciones: { pagos: [ver _armarPago], forzarLimite, fechaHora }. La suma de los pagos tiene que dar el total.
+  registrarVenta(items, { pagos = [], forzarLimite = false, fechaHora = Fechas.ahora() } = {}) {
     const caja = Logica.cajaAbierta();
     if (!caja) throw error('Abrí la caja antes de vender.');
-    if (!MEDIOS_PAGO.some(m => m.id === medio_pago)) throw error('Elegí el medio de pago.');
-    const cliente = cliente_id ? DB.buscar('clientes', cliente_id) : null;
-    if (medio_pago === 'cuenta' && (!cliente || !cliente.activo)) throw error('Para fiar, elegí el cliente.');
+    if (!pagos.length) throw error('Agregá al menos un pago.');
 
     const fecha = fechaHora.slice(0, 10);
     const agrupado = new Map();
@@ -521,8 +771,8 @@ const Logica = {
 
     return DB.transaccion(() => {
       const venta = DB.insertar('ventas', {
-        caja_id: caja.id, usuario_id: Logica.usuarioActualId, fecha_hora: fechaHora, medio_pago,
-        cliente_id: cliente ? cliente.id : null, total: 0, ganancia: 0
+        caja_id: caja.id, usuario_id: Logica.usuarioActualId, fecha_hora: fechaHora,
+        cliente_id: null, total: 0, ganancia: 0
       });
 
       for (const [productoId, cantidad] of agrupado) {
@@ -563,9 +813,23 @@ const Logica = {
         venta.ganancia += subtotal - Math.round(costoAcumulado / Logica.factor(p));
       }
 
-      if (medio_pago === 'cuenta' && cliente.limite_credito != null && !forzarLimite) {
+      // Pagos: tienen que cubrir exactamente el total
+      const suma = pagos.reduce((s, p) => s + (p.monto || 0), 0);
+      if (suma !== venta.total) {
+        throw error(`Los pagos suman ${Formato.plata(suma)} y el total es ${Formato.plata(venta.total)}.`, 'PAGOS_NO_CIERRAN');
+      }
+      const filas = pagos.map(p => Logica._armarPago(p, fechaHora));
+      const clientes = [...new Set(filas.filter(f => f.cliente_id).map(f => f.cliente_id))];
+      if (clientes.length > 1) throw error('Una venta solo puede fiarse a un cliente.');
+      filas.forEach(f => {
+        const pago = DB.insertar('pagos_venta', { ...f, venta_id: venta.id, caja_id: caja.id, fecha_hora: fechaHora, usuario_id: Logica.usuarioActualId });
+        if (pago.estado_verificacion === 'verificada') Logica._historial('venta', pago, null, 'verificada', fechaHora);
+      });
+      if (clientes.length) {
+        const cliente = DB.buscar('clientes', clientes[0]);
+        venta.cliente_id = cliente.id;
         const saldoNuevo = Logica.saldoCliente(cliente.id); // ya incluye esta venta
-        if (saldoNuevo > cliente.limite_credito) {
+        if (cliente.limite_credito != null && !forzarLimite && saldoNuevo > cliente.limite_credito) {
           throw error(`Con esta compra ${cliente.nombre} debería ${Formato.plata(saldoNuevo)} y su límite es ${Formato.plata(cliente.limite_credito)}.`, 'LIMITE');
         }
       }
@@ -602,10 +866,6 @@ const Logica = {
     return {
       ventas: ventas.slice().sort((a, b) => a.fecha_hora.localeCompare(b.fecha_hora)),
       cantidad: ventas.length, total, ganancia, costo: total - ganancia,
-      porMedio: MEDIOS_PAGO.map(m => {
-        const de = ventas.filter(v => v.medio_pago === m.id);
-        return { medio: m, cantidad: de.length, total: de.reduce((s, v) => s + v.total, 0) };
-      }),
       porCategoria: [...porCategoria.values()].sort((a, b) => b.vendido - a.vendido),
       porProducto: [...porProducto.values()].sort((a, b) => b.vendido - a.vendido)
     };
@@ -614,12 +874,16 @@ const Logica = {
   // ---------- Informes ----------
   informe(desde, hasta) {
     const enRango = fh => fh.slice(0, 10) >= desde && fh.slice(0, 10) <= hasta;
-    const agregado = Logica._agregarVentas(DB.todos('ventas').filter(v => enRango(v.fecha_hora)));
+    const ventas = DB.todos('ventas').filter(v => enRango(v.fecha_hora));
+    const agregado = Logica._agregarVentas(ventas);
+    const ids = new Set(ventas.map(v => v.id));
+    const pagos = DB.todos('pagos_venta').filter(p => ids.has(p.venta_id));
     const cobros = DB.todos('pagos_clientes').filter(p => enRango(p.fecha_hora));
     return {
       ...agregado,
+      porMedio: Logica._porMedio(pagos, cobros),
       ticketPromedio: agregado.cantidad ? Math.round(agregado.total / agregado.cantidad) : 0,
-      cobrosTotal: cobros.reduce((s, p) => s + p.monto, 0)
+      cobrosTotal: cobros.filter(p => p.estado_verificacion !== 'rechazada').reduce((s, p) => s + p.monto, 0)
     };
   },
 
@@ -723,6 +987,19 @@ const Logica = {
         titulo: d.cliente.nombre,
         detalle: `Debe ${Formato.plata(d.saldo)} y su límite es ${Formato.plata(d.cliente.limite_credito)}`
       }));
+    // Transferencias que llevan más del tiempo configurado sin verificar
+    const { minutosAviso } = Logica.config('transferencias');
+    const hace = m => (m < 60 ? `hace ${m} min` : `hace ${Math.floor(m / 60)} h ${m % 60} min`);
+    Logica.transferencias({ estado: 'pendiente' }).filter(f => f.minutosPendiente >= minutosAviso).forEach(f => lista.push({
+      clave: `transf-${f.origen}-${f.pago.id}`, tipo: 'transferencia', etiqueta: 'Transferencia sin verificar',
+      titulo: `${Formato.plata(f.pago.monto)} en ${f.medio.nombre}`,
+      detalle: `${f.referencia}, operación ${f.pago.numero_operacion}, ${hace(f.minutosPendiente)}`
+    }));
+    // Ventas con una transferencia rechazada que todavía no se resolvió
+    DB.todos('ventas').filter(v => Logica.estadoVenta(v.id) === 'problema').forEach(v => lista.push({
+      clave: `problema-${v.id}`, tipo: 'problema', etiqueta: 'Pago rechazado',
+      titulo: `Venta N.º ${v.id}`, detalle: 'Tiene una transferencia rechazada sin resolver.'
+    }));
     return lista;
   },
 
@@ -741,7 +1018,8 @@ const Logica = {
   CONFIG_INICIAL: {
     negocio: { nombre: 'Almacén', direccion: '', telefono: '', cuit: '', pie: '¡Gracias por su compra!' },
     ticket: { ancho: 80, alVender: 'preguntar', copias: 1 },
-    balanza: { activa: false, prefijo: '20', digitosPlu: 5, valor: 'peso' }
+    balanza: { activa: false, prefijo: '20', digitosPlu: 5, valor: 'peso' },
+    transferencias: { modo: 'antes', vendedorVerifica: true, minutosAviso: 10 }
   },
   config(seccion) {
     const guardada = (DB.data.config && DB.data.config[seccion]) || {};
@@ -766,6 +1044,11 @@ const Logica = {
         throw error('Con ese prefijo, el código de producto (PLU) tiene que tener entre 4 y 6 dígitos y dejar lugar para el peso o el importe.');
       }
       if (!['peso', 'importe'].includes(c.valor)) throw error('Elegí si la etiqueta trae el peso o el importe.');
+    }
+    if (seccion === 'transferencias') {
+      if (!['antes', 'libre'].includes(c.modo)) throw error('Elegí cuándo se verifican las transferencias.');
+      if (!Number.isInteger(c.minutosAviso) || c.minutosAviso < 1 || c.minutosAviso > 240) throw error('El aviso tiene que ser entre 1 y 240 minutos.');
+      c.vendedorVerifica = !!c.vendedorVerifica;
     }
     return DB.transaccion(() => { DB.data.config[seccion] = c; return c; });
   },
@@ -812,7 +1095,12 @@ const Logica = {
         subtotal: Logica.subtotal(p, d.precio_unitario, d.cantidad), mayorista: d.es_mayorista };
     });
     const cliente = v.cliente_id ? DB.buscar('clientes', v.cliente_id) : null;
-    return { venta: v, renglones, cliente, saldoCliente: cliente ? Logica.saldoCliente(cliente.id) : null,
+    // En el ticket solo van los pagos válidos: un pago rechazado ya fue reemplazado por otro
+    const pagos = Logica.pagosDeVenta(ventaId).filter(p => p.estado_verificacion !== 'rechazada').map(p => ({
+      nombre: Formato.medio(p.medio_pago_id), tipo: Logica.tipoDe(p.medio_pago_id), monto: p.monto,
+      recibido: p.recibido, vuelto: p.vuelto, cuotas: p.cuotas, estado: p.estado_verificacion
+    }));
+    return { venta: v, renglones, pagos, cliente, saldoCliente: cliente ? Logica.saldoCliente(cliente.id) : null,
       atendio: Logica.nombreUsuario(v.usuario_id), negocio: Logica.config('negocio') };
   },
 
@@ -964,6 +1252,17 @@ function cargarEjemplo() {
   const laura = DB.insertar('usuarios', { nombre: 'Laura', usuario: 'laura', clave_hash: hashClave('laura123', 'laura'), rol: 'vendedor', activo: true, fecha_alta: dia(-30) });
   Logica.usuarioActualId = admin.id;
 
+  // Medios de pago del negocio: cada cuenta y cada posnet es un medio aparte
+  const medio = (nombre, tipo, orden) => DB.insertar('medios_pago', { nombre, tipo, activo: true, orden });
+  const mEfectivo = medio('Efectivo', 'efectivo', 1);
+  const mDebito = medio('Débito Payway', 'debito', 2);
+  medio('Crédito Payway', 'credito', 3);
+  const mNacion = medio('Transferencia Banco Nación', 'transferencia', 4);
+  const mMP = medio('Transferencia Mercado Pago', 'transferencia', 5);
+  const mFiado = medio('Fiado', 'cuenta', 6);
+  // Mientras se cargan los ejemplos se permiten transferencias pendientes; al final queda la regla recomendada
+  DB.data.config.transferencias = { ...Logica.CONFIG_INICIAL.transferencias, modo: 'libre' };
+
   const cat = {};
   ['Almacén', 'Bebidas', 'Fiambrería', 'Lácteos', 'Panificados', 'Servicios'].forEach(n => { cat[n] = DB.insertar('categorias', { nombre: n }); });
 
@@ -1004,10 +1303,13 @@ function cargarEjemplo() {
   const raul = DB.insertar('clientes', { nombre: 'Raúl Díaz', telefono: '3815550202', limite_credito: 30000, activo: true, fecha_alta: dia(-20) });
   DB.insertar('clientes', { nombre: 'Sofía Ledesma', telefono: '', limite_credito: null, activo: true, fecha_alta: dia(-10) });
 
-  const vender = (n, hora, items, medio_pago = 'efectivo', cliente = null) => Logica.registrarVenta(
+  // pagos: función que recibe el total y devuelve la lista de pagos
+  const totalDe = items => items.reduce((s, [p, c]) => s + Logica.subtotal(p, Logica.precioPara(p, c).precio, c), 0);
+  const vender = (n, hora, items, pagos = t => [{ medio_pago_id: mEfectivo.id, monto: t }]) => Logica.registrarVenta(
     items.map(([p, cantidad]) => ({ producto_id: p.id, cantidad })),
-    { medio_pago, cliente_id: cliente ? cliente.id : null, fechaHora: momento(n, hora), forzarLimite: true }
+    { pagos: pagos(totalDe(items)), fechaHora: momento(n, hora), forzarLimite: true }
   );
+  const fiado = cliente => t => [{ medio_pago_id: mFiado.id, monto: t, cliente_id: cliente.id }];
   const cerrar = (n, faltante = 0) => {
     const esperado = Logica.resumenCaja(Logica.cajaAbierta()).efectivoEsperado;
     Logica.cerrarCaja(esperado - faltante, faltante ? 'Faltó plata, revisar vueltos' : '', momento(n, '21:00'));
@@ -1022,22 +1324,32 @@ function cargarEjemplo() {
   Logica.usuarioActualId = laura.id;
   Logica.abrirCaja(20000, momento(-3, '08:00'));
   vender(-3, '10:10', [[leche, 4], [pan, 6]]);
-  vender(-3, '18:15', [[queso, 500]], 'cuenta', marta);
+  vender(-3, '18:15', [[queso, 500]], fiado(marta));
   Logica.registrarMovimiento({ tipo: 'salida', motivo: 'pago_proveedor', monto: 9000, descripcion: 'Panadería' }, momento(-3, '11:00'));
   cerrar(-3, 500);
 
   // Ayer
   Logica.usuarioActualId = admin.id;
   Logica.abrirCaja(20000, momento(-1, '08:00'));
-  vender(-1, '11:20', [[yerba, 2], [fideos, 2], [gaseosa, 6]], 'debito');
-  vender(-1, '19:05', [[queso, 300], [galletitas, 2]], 'cuenta', raul);
+  vender(-1, '11:20', [[yerba, 2], [fideos, 2], [gaseosa, 6]], t => [{ medio_pago_id: mDebito.id, monto: t, cupon: '000231' }]);
+  vender(-1, '16:40', [[fideos, 1]], t => [{ medio_pago_id: mMP.id, monto: t, numero_operacion: '1029384756', titular: 'Ana Ruiz', acreditada: true }]);
+  vender(-1, '19:05', [[queso, 300], [galletitas, 2]], fiado(raul));
+  // Una transferencia que nunca llegó: queda rechazada y sin resolver
+  const falsa = vender(-1, '20:10', [[recarga, 1]], t => [{ medio_pago_id: mNacion.id, monto: t, numero_operacion: '33445566', titular: 'Sin datos' }]);
+  Logica.rechazarPago('venta', Logica.pagosDeVenta(falsa.id)[0].id, 'No se acreditó en la cuenta', momento(-1, '20:45'));
   cerrar(-1);
 
   // Hoy: la caja queda abierta
   Logica.abrirCaja(20000, momento(0, '08:00'));
   vender(0, '09:30', [[leche, 2], [queso, 300], [recarga, 1]]);
+  // Pago mixto: una parte por transferencia (todavía sin verificar) y el resto en efectivo
   Logica.usuarioActualId = laura.id;
-  vender(0, '10:05', [[yerba, 1]], 'transferencia');
-  Logica.registrarPago(marta.id, { monto: 3000, medio_pago: 'efectivo' }, momento(0, '10:30'));
+  vender(0, '10:05', [[yerba, 1], [pan, 1]], t => [
+    { medio_pago_id: mNacion.id, monto: 5000, numero_operacion: '48291037', titular: 'Juan Pérez' },
+    { medio_pago_id: mEfectivo.id, monto: t - 5000, recibido: 2000 }
+  ]);
+  Logica.registrarPago(marta.id, { monto: 3000, medio_pago_id: mEfectivo.id }, momento(0, '10:30'));
+  Logica.registrarPago(raul.id, { monto: 2000, medio_pago_id: mMP.id, numero_operacion: '5566778899', titular: 'Raúl Díaz' }, momento(0, '10:45'));
+  DB.data.config.transferencias = { ...Logica.CONFIG_INICIAL.transferencias };
   Logica.usuarioActualId = null;
 }

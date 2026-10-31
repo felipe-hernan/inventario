@@ -1,5 +1,5 @@
 -- =====================================================================
--- Sistema de stock para almacén: modelo de base de datos (versión 3, con usuarios)
+-- Sistema de stock para almacén: modelo de base de datos (versión 4, con pagos y transferencias)
 -- Pensado para PostgreSQL. Montos en pesos enteros.
 -- Productos por peso: stock y cantidades en gramos, precios por kilo.
 -- =====================================================================
@@ -110,29 +110,31 @@ CREATE TABLE movimientos_caja (
   usuario_id   INT REFERENCES usuarios(id)
 );
 
-CREATE TABLE pagos_clientes (
-  id          SERIAL PRIMARY KEY,
-  cliente_id  INT NOT NULL REFERENCES clientes(id) ON DELETE RESTRICT,
-  caja_id     INT NOT NULL REFERENCES cajas(id) ON DELETE RESTRICT,
-  fecha_hora  TIMESTAMP NOT NULL DEFAULT NOW(),
-  monto       INT NOT NULL CHECK (monto > 0),
-  medio_pago  VARCHAR(15) NOT NULL CHECK (medio_pago IN ('efectivo', 'debito', 'credito', 'transferencia')),
-  nota        VARCHAR(200),
-  usuario_id  INT REFERENCES usuarios(id)
-);
+-- (se crea después de medios_pago, ver más abajo)
 
 -- ---------- Ventas ----------
+
+-- ---------- Medios de pago (catálogo que configura el administrador) ----------
+
+-- Cada cuenta o posnet es un medio aparte. El tipo define el comportamiento y es fijo.
+CREATE TABLE medios_pago (
+  id      SERIAL PRIMARY KEY,
+  nombre  VARCHAR(60) NOT NULL UNIQUE,                 -- «Transferencia Banco Nación», «Débito Payway»…
+  tipo    VARCHAR(15) NOT NULL CHECK (tipo IN ('efectivo', 'debito', 'credito', 'transferencia', 'cuenta')),
+  activo  BOOLEAN NOT NULL DEFAULT TRUE,               -- se desactiva en lugar de borrarse si ya tiene cobros
+  orden   INT NOT NULL                                 -- orden en la pantalla de cobro
+);
+CREATE UNIQUE INDEX ux_un_solo_fiado ON medios_pago(tipo) WHERE tipo = 'cuenta';
 
 CREATE TABLE ventas (
   id          SERIAL PRIMARY KEY,
   caja_id     INT NOT NULL REFERENCES cajas(id) ON DELETE RESTRICT,
   usuario_id  INT REFERENCES usuarios(id),          -- quién atendió
-  fecha_hora  TIMESTAMP NOT NULL DEFAULT NOW(),
-  medio_pago  VARCHAR(15) NOT NULL CHECK (medio_pago IN ('efectivo', 'debito', 'credito', 'transferencia', 'cuenta')),
-  cliente_id  INT REFERENCES clientes(id) ON DELETE RESTRICT,
+  fecha_hora  TIMESTAMP NOT NULL DEFAULT NOW(),     -- la pone el servidor
+  cliente_id  INT REFERENCES clientes(id) ON DELETE RESTRICT,  -- si una parte se fió
   total       INT NOT NULL,
-  ganancia    INT NOT NULL,
-  CHECK (medio_pago <> 'cuenta' OR cliente_id IS NOT NULL)   -- fiar exige cliente
+  ganancia    INT NOT NULL
+  -- El medio de pago ya no está acá: una venta puede tener varios pagos (pagos_venta).
 );
 CREATE INDEX ix_ventas_fecha ON ventas(fecha_hora);
 CREATE INDEX ix_ventas_cliente ON ventas(cliente_id);
@@ -156,6 +158,78 @@ CREATE TABLE detalle_venta_lote (
   cantidad          INT NOT NULL CHECK (cantidad > 0)
 );
 
+-- ---------- Pagos ----------
+
+-- Cada pago de una venta. Una venta puede tener varios (pago mixto); la suma da el total.
+-- Los campos opcionales se usan según el tipo del medio.
+CREATE TABLE pagos_venta (
+  id                   SERIAL PRIMARY KEY,
+  venta_id             INT NOT NULL REFERENCES ventas(id) ON DELETE RESTRICT,
+  caja_id              INT REFERENCES cajas(id),             -- turno en el que entró la plata
+  medio_pago_id        INT NOT NULL REFERENCES medios_pago(id),
+  monto                INT NOT NULL CHECK (monto > 0),
+  fecha_hora           TIMESTAMP NOT NULL DEFAULT NOW(),
+  usuario_id           INT REFERENCES usuarios(id),
+  -- efectivo
+  recibido             INT,                                  -- «paga con»
+  vuelto               INT,
+  -- débito y crédito (nunca el número completo de la tarjeta)
+  cupon                VARCHAR(20),
+  cuotas               INT CHECK (cuotas BETWEEN 1 AND 24),
+  -- fiado
+  cliente_id           INT REFERENCES clientes(id),
+  -- transferencia
+  numero_operacion     VARCHAR(40),
+  titular              VARCHAR(100),
+  estado_verificacion  VARCHAR(12) CHECK (estado_verificacion IN ('pendiente', 'verificada', 'rechazada')),
+  metodo_verificacion  VARCHAR(12) CHECK (metodo_verificacion IN ('manual', 'automatico')),  -- automático: futuro, con Mercado Pago
+  verificado_por       INT REFERENCES usuarios(id),
+  verificado_en        TIMESTAMP,                            -- la pone el servidor
+  motivo_rechazo       VARCHAR(200),
+  autorizado_por       INT REFERENCES usuarios(id),          -- si el admin autorizó un número de operación repetido
+  motivo_autorizacion  VARCHAR(200),
+  resuelto_con         INT REFERENCES pagos_venta(id),       -- pago que reemplazó a uno rechazado
+  CHECK (recibido IS NULL OR recibido >= monto),
+  CHECK (estado_verificacion IS NULL OR numero_operacion IS NOT NULL),
+  CHECK (estado_verificacion <> 'pendiente' OR (metodo_verificacion IS NULL AND verificado_por IS NULL AND verificado_en IS NULL)),
+  CHECK (estado_verificacion NOT IN ('verificada', 'rechazada') OR (metodo_verificacion IS NOT NULL AND verificado_en IS NOT NULL)),
+  CHECK (metodo_verificacion <> 'manual' OR verificado_por IS NOT NULL),
+  CHECK (estado_verificacion <> 'rechazada' OR motivo_rechazo IS NOT NULL)
+);
+CREATE INDEX ix_pagos_venta_venta ON pagos_venta(venta_id);
+CREATE INDEX ix_pagos_venta_pendientes ON pagos_venta(estado_verificacion) WHERE estado_verificacion = 'pendiente';
+-- El número de operación no se repite en la misma cuenta. Si el administrador autoriza un repetido,
+-- se valida en el servidor (por eso no es un índice UNIQUE estricto).
+
+-- Cobros de deudas de fiado: mismos datos de medio y verificación.
+CREATE TABLE pagos_clientes (
+  id                   SERIAL PRIMARY KEY,
+  cliente_id           INT NOT NULL REFERENCES clientes(id) ON DELETE RESTRICT,
+  caja_id              INT NOT NULL REFERENCES cajas(id) ON DELETE RESTRICT,
+  medio_pago_id        INT NOT NULL REFERENCES medios_pago(id),
+  fecha_hora           TIMESTAMP NOT NULL DEFAULT NOW(),
+  monto                INT NOT NULL CHECK (monto > 0),
+  usuario_id           INT REFERENCES usuarios(id),
+  recibido             INT, vuelto INT, cupon VARCHAR(20), cuotas INT,
+  numero_operacion     VARCHAR(40), titular VARCHAR(100),
+  estado_verificacion  VARCHAR(12) CHECK (estado_verificacion IN ('pendiente', 'verificada', 'rechazada')),
+  metodo_verificacion  VARCHAR(12), verificado_por INT REFERENCES usuarios(id), verificado_en TIMESTAMP,
+  motivo_rechazo       VARCHAR(200), autorizado_por INT REFERENCES usuarios(id), motivo_autorizacion VARCHAR(200)
+);
+
+-- Historial de cada cambio de estado de una transferencia (quién, cuándo y por qué).
+CREATE TABLE verificaciones_pago (
+  id               SERIAL PRIMARY KEY,
+  origen           VARCHAR(10) NOT NULL CHECK (origen IN ('venta', 'cobro')),  -- pagos_venta o pagos_clientes
+  pago_id          INT NOT NULL,
+  estado_anterior  VARCHAR(12),
+  estado_nuevo     VARCHAR(12) NOT NULL,
+  metodo           VARCHAR(12) NOT NULL,
+  usuario_id       INT REFERENCES usuarios(id),
+  fecha_hora       TIMESTAMP NOT NULL DEFAULT NOW(),
+  motivo           VARCHAR(200)
+);
+
 -- ---------- Configuración ----------
 
 CREATE TABLE configuracion (
@@ -170,5 +244,7 @@ INSERT INTO configuracion VALUES
   -- Impresora de tickets: ancho del papel (58 u 80), qué hacer al vender (preguntar, siempre, nunca) y copias
   ('ticket_ancho', '80'), ('ticket_al_vender', 'preguntar'), ('ticket_copias', '1'),
   -- Balanza etiquetadora: EAN-13 de peso variable = prefijo + PLU + peso o importe + dígito de control
-  ('balanza_activa', 'false'), ('balanza_prefijo', '20'), ('balanza_digitos_plu', '5'), ('balanza_valor', 'peso');
+  ('balanza_activa', 'false'), ('balanza_prefijo', '20'), ('balanza_digitos_plu', '5'), ('balanza_valor', 'peso'),
+  -- Transferencias: verificar antes de confirmar ('antes') o permitir después ('libre'); si el vendedor puede verificar; aviso en minutos
+  ('transferencias_modo', 'antes'), ('transferencias_vendedor_verifica', 'true'), ('transferencias_minutos_aviso', '10');
 -- En productos por peso que se venden con etiqueta de balanza, productos.codigo guarda el PLU.

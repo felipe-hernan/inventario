@@ -67,7 +67,15 @@
           <form class="card card-body bg-body-tertiary mb-3" data-enviar="cliente-pago" data-id="${c.id}" novalidate>
             ${caja ? `<div class="row g-3">
                 <div class="col-sm-6">${H.campo('Monto que paga', `<div class="input-group"><span class="input-group-text">$</span><input class="form-control" name="monto" type="number" min="1" max="${saldo}" step="1" inputmode="numeric" value="${saldo}"></div>`)}</div>
-                <div class="col-sm-6">${H.campo('Cómo paga', `<select class="form-select" name="medio">${MEDIOS_PAGO.filter(m => m.id !== 'cuenta').map(m => `<option value="${m.id}">${m.nombre}</option>`).join('')}</select>`)}</div>
+                <div class="col-sm-6">${H.campo('Cómo paga', `<select class="form-select" name="medio" data-cambio="pago-medio">${Logica.mediosPago({ soloActivos: true }).filter(m => m.tipo !== 'cuenta').map(m => `<option value="${m.id}" data-tipo="${m.tipo}">${esc(m.nombre)}</option>`).join('')}</select>`)}</div>
+              </div>
+              <div data-bloque="pago-transferencia" hidden>
+                <div class="row g-3">
+                  <div class="col-sm-6">${H.campo('N.º de operación', '<input class="form-control" name="numero_operacion" inputmode="numeric" autocomplete="off">')}</div>
+                  <div class="col-sm-6">${H.campo('Titular <span class="fw-normal text-body-secondary">(opcional)</span>', '<input class="form-control" name="titular" autocomplete="off">')}</div>
+                </div>
+                <div class="form-check mb-3"><input class="form-check-input" type="checkbox" id="pago-acreditada" name="acreditada" ${Logica.puedeVerificar() ? '' : 'disabled'}>
+                  <label class="form-check-label" for="pago-acreditada">Ya la verifiqué en la cuenta del negocio: está acreditada</label></div>
               </div>
               ${H.error('pago-error')}
               <div><button type="submit" class="btn btn-primary">Confirmar pago</button></div>`
@@ -80,7 +88,7 @@
           <tbody>${movimientos.map(m => `<tr>
             <td class="text-nowrap">${Formato.fechaHora(m.fecha_hora)}</td><td>${esc(m.detalle)}</td>
             <td class="num">${m.tipo === 'compra' ? Formato.plata(m.monto) : ''}</td>
-            <td class="num text-success fw-semibold">${m.tipo === 'pago' ? Formato.plata(m.monto) : ''}</td>
+            <td class="num ${m.tipo === 'rechazado' ? 'text-danger text-decoration-line-through' : 'text-success fw-semibold'}">${m.tipo !== 'compra' ? Formato.plata(m.monto) : ''}${m.estado === 'pendiente' ? ' <i class="bi bi-hourglass-split text-warning" title="Sin verificar"></i>' : ''}</td>
             <td class="num fw-bold">${Formato.plata(m.saldo)}</td></tr>`).join('')}</tbody>
         </table></div>` : H.vacio('Todavía no compró fiado.')}`
     }, { ancho: 'normal' });
@@ -129,11 +137,17 @@
   App.envios['cliente-pago'] = form => {
     const id = +form.dataset.id;
     try {
-      const pago = Logica.registrarPago(id, { monto: num(form.elements.monto.value), medio_pago: form.elements.medio.value });
+      const f = form.elements;
+      const pago = Logica.registrarPago(id, { monto: num(f.monto.value), medio_pago_id: +f.medio.value,
+        numero_operacion: f.numero_operacion.value, titular: f.titular.value, acreditada: f.acreditada.checked });
       UI.avisar(`Pago de ${Formato.plata(pago.monto)} registrado`);
       UI.render();
       abrirCuenta(id);
     } catch (e) { $('#pago-error').textContent = e.message; }
+  };
+  App.cambios['pago-medio'] = el => {
+    const tipo = el.selectedOptions[0].dataset.tipo;
+    $('#dlg [data-bloque=pago-transferencia]').hidden = tipo !== 'transferencia';
   };
   App.acciones['cliente-baja'] = el => {
     const c = DB.buscar('clientes', +el.dataset.id);

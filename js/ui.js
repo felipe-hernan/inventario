@@ -83,6 +83,11 @@ const UI = {
     UI.renderUsuario();
     UI.renderEstadoCaja();
     UI.actualizarInsignia();
+    // Contador de transferencias pendientes en el menú
+    const pendientes = Logica.transferencias({ estado: 'pendiente' }).length;
+    const marca = $('#menu-transf-pendientes');
+    marca.hidden = !pendientes;
+    marca.textContent = pendientes;
     App.vistas[v]();
   },
 
@@ -214,8 +219,8 @@ const UI = {
   renderNotificaciones(menu) {
     const lista = Logica.notificaciones();
     const nuevas = new Set(Logica.notificacionesNuevas(lista).map(n => n.clave));
-    const tono = { caja: 'warning', vencido: 'danger', 'por-vencer': 'warning', stock: 'primary', limite: 'info' };
-    const icono = { caja: 'cash-stack', vencido: 'x-octagon', 'por-vencer': 'hourglass-split', stock: 'box-seam', limite: 'person-exclamation' };
+    const tono = { caja: 'warning', vencido: 'danger', 'por-vencer': 'warning', stock: 'primary', limite: 'info', transferencia: 'warning', problema: 'danger' };
+    const icono = { caja: 'cash-stack', vencido: 'x-octagon', 'por-vencer': 'hourglass-split', stock: 'box-seam', limite: 'person-exclamation', transferencia: 'bank', problema: 'exclamation-octagon' };
     menu.setAttribute('data-bs-theme', document.documentElement.dataset.bsTheme);
     menu.innerHTML = `
       <div class="d-flex justify-content-between align-items-baseline px-3 py-2 border-bottom">
@@ -271,6 +276,8 @@ App.acciones['notif-ir'] = el => {
   UI.cerrarNotificaciones();
   const { tipo, producto, cliente } = el.dataset;
   if (tipo === 'caja') return UI.navegar('caja');
+  if (tipo === 'transferencia') { App.filtrarTransferencias('pendiente'); return UI.navegar('transferencias'); }
+  if (tipo === 'problema') { App.filtrarTransferencias('rechazada'); return UI.navegar('transferencias'); }
   if (tipo === 'limite') return App.acciones['cliente-cuenta']({ dataset: { id: cliente } });
   if (tipo === 'stock') {
     App.estado.reponerId = +producto;

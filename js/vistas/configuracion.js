@@ -6,10 +6,48 @@
     const n = Logica.config('negocio');
     const t = Logica.config('ticket');
     const b = Logica.config('balanza');
+    const tr = Logica.config('transferencias');
+    const medios = Logica.mediosPago();
     const opcional = '<span class="fw-normal text-body-secondary">(opcional)</span>';
     UI.vista().innerHTML = `
       ${H.tituloPagina('Configuración')}
       <div class="row g-4">
+        <div class="col-xl-6">
+          <section class="card shadow-sm h-100"><div class="card-body">
+            <h2 class="h5"><i class="bi bi-wallet2"></i> Medios de pago</h2>
+            <p class="small text-body-secondary">Cada cuenta o posnet es un medio aparte. Aparecen en este orden al cobrar. Un medio que ya tiene cobros no se borra: se desactiva.</p>
+            ${H.error('cfg-medios-error')}
+            <ul class="list-group mb-3">${medios.map((m, i) => `<li class="list-group-item d-flex align-items-center gap-2 ${m.activo ? '' : 'text-body-secondary'}">
+              <div class="btn-group-vertical btn-group-sm">
+                <button type="button" class="btn btn-link p-0" data-accion="medio-mover" data-id="${m.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="Subir"><i class="bi bi-chevron-up"></i></button>
+                <button type="button" class="btn btn-link p-0" data-accion="medio-mover" data-id="${m.id}" data-dir="1" ${i === medios.length - 1 ? 'disabled' : ''} aria-label="Bajar"><i class="bi bi-chevron-down"></i></button>
+              </div>
+              <div class="flex-grow-1 min-w-0"><div class="fw-semibold text-truncate">${esc(m.nombre)}</div><div class="small text-body-secondary">${TIPOS_PAGO[m.tipo]}${m.activo ? '' : ' · desactivado'}</div></div>
+              <div class="form-check form-switch mb-0" title="Activo"><input class="form-check-input" type="checkbox" role="switch" aria-label="Activo" data-cambio="medio-activo" data-id="${m.id}" ${m.activo ? 'checked' : ''}></div>
+              <button type="button" class="btn btn-sm btn-outline-secondary" data-accion="medio-editar" data-id="${m.id}" aria-label="Editar ${esc(m.nombre)}"><i class="bi bi-pencil"></i></button>
+              ${Logica.medioUsado(m.id) ? '' : `<button type="button" class="btn btn-sm btn-outline-danger" data-accion="medio-borrar" data-id="${m.id}" aria-label="Borrar ${esc(m.nombre)}"><i class="bi bi-trash"></i></button>`}
+            </li>`).join('')}</ul>
+            <button type="button" class="btn btn-primary" data-accion="medio-nuevo"><i class="bi bi-plus-lg"></i> Agregar medio de pago</button>
+          </div></section>
+        </div>
+
+        <div class="col-xl-6">
+          <form class="card shadow-sm h-100" data-enviar="cfg-transferencias" novalidate><div class="card-body">
+            <h2 class="h5"><i class="bi bi-shield-check"></i> Transferencias</h2>
+            <p class="small text-body-secondary">Para evitar transferencias falsas: se verifican en la cuenta del negocio, no en el celular del cliente.</p>
+            ${H.error('cfg-transf-error')}
+            <span class="form-label d-block fw-semibold">¿Cuándo se verifican?</span>
+            ${H.check(`name="modo" value="antes" ${tr.modo === 'antes' ? 'checked' : ''}`, '<strong>Antes de confirmar la venta</strong> (recomendado)', 'El vendedor no puede cobrar una transferencia sin marcarla como acreditada. El administrador sí puede dejarla pendiente.', 'radio', 'mb-2')}
+            ${H.check(`name="modo" value="libre" ${tr.modo === 'libre' ? 'checked' : ''}`, '<strong>Antes o después</strong>', 'Si hay cola, se puede cobrar y verificarla más tarde en «Transferencias». El riesgo corre por cuenta del negocio.', 'radio', 'mb-3')}
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="vend-verifica" name="vendedorVerifica" ${tr.vendedorVerifica ? 'checked' : ''}>
+              <label class="form-check-label" for="vend-verifica">El vendedor puede verificar transferencias<span class="form-text d-block mt-0">Desactivalo si el vendedor no tiene acceso a la app de las cuentas. Rechazar siempre es del administrador.</span></label>
+            </div>
+            <div style="max-width: 16rem">${H.campo('Avisar cuando una transferencia lleve sin verificar', `<div class="input-group"><input class="form-control" name="minutosAviso" type="number" min="1" max="240" value="${tr.minutosAviso}"><span class="input-group-text">minutos</span></div>`)}</div>
+            <button type="submit" class="btn btn-primary">Guardar</button>
+          </div></form>
+        </div>
+
         <div class="col-xl-6">
           <form class="card shadow-sm h-100" data-enviar="cfg-negocio" novalidate><div class="card-body">
             <h2 class="h5"><i class="bi bi-shop"></i> Datos del negocio</h2>
@@ -149,6 +187,48 @@
     const f = form.elements;
     guardar('ticket', { ancho: Number(f.ancho.value), alVender: f.alVender.value, copias: Number(f.copias.value) }, 'cfg-ticket-error', 'Impresora configurada');
   };
+  App.envios['cfg-transferencias'] = form => {
+    const f = form.elements;
+    guardar('transferencias', { modo: f.modo.value, vendedorVerifica: f.vendedorVerifica.checked, minutosAviso: Number(f.minutosAviso.value) }, 'cfg-transf-error', 'Reglas de transferencias guardadas');
+  };
+
+  // ---------- Medios de pago ----------
+  function formMedio(id = null) {
+    const m = id ? DB.buscar('medios_pago', id) : null;
+    const usado = m && Logica.medioUsado(m.id);
+    UI.abrirDialogo({
+      titulo: m ? 'Editar medio de pago' : 'Nuevo medio de pago', enviar: 'medio-guardar', atributos: `data-id="${id || ''}"`,
+      cuerpo: `${H.error()}
+        ${H.campo('Nombre', `<input class="form-control" name="nombre" value="${esc(m?.nombre)}" placeholder="Por ejemplo: Transferencia Banco Galicia" autocomplete="off" data-foco>`, 'Es lo que ve el cajero y lo que sale en el ticket.')}
+        ${H.campo('Tipo', `<select class="form-select" name="tipo" ${usado ? 'disabled' : ''}>${Object.entries(TIPOS_PAGO).map(([k, v]) => `<option value="${k}" ${(m ? m.tipo : 'transferencia') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`,
+          usado ? 'No se puede cambiar porque ya tiene cobros.' : 'Define cómo se comporta: el efectivo suma a la caja, las transferencias piden número de operación y verificación, el fiado suma a la deuda del cliente.')}`,
+      pie: UI.pie('Guardar')
+    }, { ancho: 'chico' });
+  }
+  App.acciones['medio-nuevo'] = () => formMedio();
+  App.acciones['medio-editar'] = el => formMedio(+el.dataset.id);
+  App.envios['medio-guardar'] = form => {
+    const id = form.dataset.id ? +form.dataset.id : null;
+    const existente = id ? DB.buscar('medios_pago', id) : null;
+    try {
+      Logica.guardarMedio({ nombre: form.elements.nombre.value, tipo: form.elements.tipo.disabled ? existente.tipo : form.elements.tipo.value }, id);
+      UI.cerrarDialogo();
+      UI.avisar('Medio de pago guardado');
+      App.vistas.configuracion();
+    } catch (e) { $('#dlg-error').textContent = e.message; }
+  };
+  App.acciones['medio-mover'] = el => { Logica.moverMedio(+el.dataset.id, +el.dataset.dir); App.vistas.configuracion(); };
+  App.cambios['medio-activo'] = el => {
+    try { Logica.cambiarActivoMedio(+el.dataset.id, el.checked); App.vistas.configuracion(); }
+    catch (e) { el.checked = !el.checked; $('#cfg-medios-error').textContent = e.message; }
+  };
+  App.acciones['medio-borrar'] = el => {
+    const m = DB.buscar('medios_pago', +el.dataset.id);
+    if (!confirm(`¿Borrar «${m.nombre}»?`)) return;
+    try { Logica.borrarMedio(m.id); App.vistas.configuracion(); }
+    catch (e) { $('#cfg-medios-error').textContent = e.message; }
+  };
+
   App.envios['cfg-balanza'] = form => {
     const f = form.elements;
     guardar('balanza', { activa: f.activa.checked, prefijo: f.prefijo.value.trim(), digitosPlu: Number(f.digitosPlu.value), valor: f.valor.value }, 'cfg-balanza-error', 'Balanza configurada');
