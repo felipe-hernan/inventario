@@ -162,4 +162,13 @@ CREATE TABLE configuracion (
   clave  VARCHAR(40) PRIMARY KEY,
   valor  VARCHAR(200) NOT NULL
 );
-INSERT INTO configuracion VALUES ('dias_aviso_vencimiento', '7');
+INSERT INTO configuracion VALUES
+  ('dias_aviso_vencimiento', '7'),
+  -- Datos que salen en el ticket
+  ('negocio_nombre', 'Almacén'), ('negocio_direccion', ''), ('negocio_telefono', ''), ('negocio_cuit', ''),
+  ('negocio_pie', '¡Gracias por su compra!'),
+  -- Impresora de tickets: ancho del papel (58 u 80), qué hacer al vender (preguntar, siempre, nunca) y copias
+  ('ticket_ancho', '80'), ('ticket_al_vender', 'preguntar'), ('ticket_copias', '1'),
+  -- Balanza etiquetadora: EAN-13 de peso variable = prefijo + PLU + peso o importe + dígito de control
+  ('balanza_activa', 'false'), ('balanza_prefijo', '20'), ('balanza_digitos_plu', '5'), ('balanza_valor', 'peso');
+-- En productos por peso que se venden con etiqueta de balanza, productos.codigo guarda el PLU.

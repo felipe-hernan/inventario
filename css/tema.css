@@ -19,7 +19,6 @@
   --bs-link-color-rgb: 31, 107, 74;
   --bs-link-hover-color: #154d35;
   --fondo: #F2F5F3;            /* fondo de la página */
-  --fondo-exterior: #DCE3DE;   /* a los costados en monitores anchos */
   /* --bs-body-bg queda blanco: es el fondo de tarjetas, modales y campos */
 }
 [data-bs-theme="dark"] {
@@ -38,7 +37,6 @@
   --bs-secondary-bg: #222C27;
   --bs-tertiary-bg: #1D2722;
   --fondo: #0F1613;
-  --fondo-exterior: #090D0B;
 }
 .btn-primary {
   --bs-btn-color: var(--marca-texto);
@@ -77,11 +75,10 @@
 .table > thead th { background: var(--bs-tertiary-bg); font-size: .8125rem; color: var(--bs-secondary-color); font-weight: 600; white-space: nowrap; }
 .table .sub { display: block; font-size: .8125rem; color: var(--bs-secondary-color); }
 
-/* ---------- Estructura: centrado en monitores anchos ---------- */
-body { background: var(--fondo-exterior); }
-.app { max-width: 90rem; margin: 0 auto; background: var(--fondo); min-height: 100vh; }
-@media (min-width: 90.01rem) { .app { box-shadow: 0 0 0 1px var(--bs-border-color), 0 12px 48px rgba(20, 40, 30, .10); } }
-main { padding: 2rem clamp(1rem, 3vw, 2.5rem) 4rem; min-width: 0; }
+/* ---------- Estructura: ocupa todo el ancho de la pantalla, también en monitores ultrawide ---------- */
+body { background: var(--fondo); }
+.app { background: var(--fondo); min-height: 100vh; }
+main { padding: 2rem clamp(1rem, 3vw, 3.5rem) 4rem; min-width: 0; }
 main:focus { outline: none; }
 
 /* ---------- Barra lateral ---------- */
@@ -135,6 +132,10 @@ body.sin-sesion main { padding: 0; }
 /* ---------- Modal con formulario y scroll ---------- */
 .modal-form { display: flex; flex-direction: column; min-height: 0; max-height: 100%; }
 .modal-dialog-scrollable .modal-form .modal-body { overflow-y: auto; }
+
+/* Vender: la lista de productos crece con la pantalla; el ticket tiene un ancho de papel razonable */
+.vender-grid { display: grid; gap: 1.5rem; align-items: start; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 992px) { .vender-grid { grid-template-columns: minmax(0, 1fr) minmax(20rem, 28rem); } }
 
 /* ---------- Ticket: pieza propia, no es de Bootstrap ---------- */
 .ticket-envoltura { position: sticky; top: 1.5rem; filter: drop-shadow(0 1px 1px rgba(20, 40, 30, .12)) drop-shadow(0 6px 14px rgba(20, 40, 30, .10)); }
