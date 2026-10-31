@@ -149,10 +149,12 @@
       titulo: `Cierre de caja del ${Formato.fecha(c.fecha_apertura)}`,
       subtitulo: `De ${Formato.hora(c.fecha_apertura)} a ${Formato.hora(c.fecha_cierre)}${c.fecha_cierre.slice(0, 10) !== c.fecha_apertura.slice(0, 10) ? ` del ${Formato.fecha(c.fecha_cierre)}` : ''}. Abrió ${esc(Logica.nombreUsuario(c.usuario_apertura_id)) || '—'}, cerró ${esc(Logica.nombreUsuario(c.usuario_cierre_id)) || '—'}.`,
       cuerpo: resumenHTML(Logica.resumenCaja(c)),
-      pie: `<button type="button" class="btn btn-outline-secondary" data-accion="imprimir"><i class="bi bi-printer"></i> Imprimir</button>
+      pie: `<button type="button" class="btn btn-outline-secondary" data-accion="cierre-ticket" data-id="${c.id}"><i class="bi bi-receipt"></i> Ticket de cierre</button>
+        <button type="button" class="btn btn-outline-secondary" data-accion="imprimir"><i class="bi bi-printer"></i> Imprimir en hoja</button>
         <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Listo</button>`
     }, { ancho: 'grande' });
   }
   App.acciones['corte-ver'] = el => verCorte(+el.dataset.id);
   App.acciones.imprimir = () => window.print();
+  App.acciones['cierre-ticket'] = el => Impresora.ticketCierre(+el.dataset.id);
 })();

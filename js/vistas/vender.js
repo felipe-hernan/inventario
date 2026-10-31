@@ -1,6 +1,6 @@
 /* Vender: buscar o escanear, armar el ticket y cobrar eligiendo el medio de pago. */
 (function () {
-  const est = App.estado.venta = { carrito: [], sel: null, busqueda: '', aviso: '' };
+  const est = App.estado.venta = { carrito: [], sel: null, busqueda: '', aviso: null, ultima: null };
   const enCarrito = id => (est.carrito.find(r => r.producto_id === id) || {}).cantidad || 0;
 
   function totalCarrito() {
@@ -49,15 +49,42 @@
                 <input type="search" class="form-control" id="venta-buscar" placeholder="Escaneá o buscá por nombre" aria-label="Escaneá o buscá por nombre"
                   data-input="venta-buscar" data-enter="venta-enter" autocomplete="off" value="${esc(est.busqueda)}">
               </div>
-              <div class="text-success fw-semibold small mb-2" id="venta-aviso" aria-live="polite">${esc(est.aviso)}</div>
+              <div id="venta-aviso" aria-live="polite">${avisoHTML()}</div>
               <div id="venta-resultados">${resultados()}</div>`}
           </div></section>
         </div>
         <div class="col-lg-5">${ticket()}</div>
       </div>`;
-    est.aviso = '';
+    est.aviso = null;
     UI.enfocar(sel ? $('#venta-cantidad') : $('#venta-buscar'), !!sel);
   };
+
+  function avisoHTML() {
+    const a = est.aviso;
+    if (!a) return '';
+    return `<div class="small fw-semibold mb-2 ${a.tipo === 'error' ? 'text-danger' : 'text-success'}">
+      <i class="bi bi-${a.tipo === 'error' ? 'exclamation-circle' : 'check-circle'}"></i> ${esc(a.texto)}
+      ${a.codigo && UI.esAdmin() ? `<button type="button" class="btn btn-link btn-sm p-0 align-baseline ms-1" data-accion="venta-crear-codigo" data-codigo="${esc(a.codigo)}">Crear producto con este código</button>` : ''}</div>`;
+  }
+
+  // Lo que llega del lector (o de Enter en el buscador con un código): producto, etiqueta de balanza o desconocido.
+  function procesarCodigo(codigo) {
+    const r = Logica.interpretarCodigo(codigo);
+    est.busqueda = '';
+    if (r.error) {
+      est.aviso = { tipo: 'error', texto: r.error, codigo: r.desconocido ? r.codigo : null };
+    } else if (r.cantidad) {
+      const problema = agregar(r.producto, r.cantidad);
+      est.aviso = problema ? { tipo: 'error', texto: `${r.producto.nombre}: ${problema}` } : { tipo: 'ok', texto: `Agregado: ${r.producto.nombre}, ${r.detalle}` };
+    } else if (r.producto.tipo_medida === 'unidad') {
+      const problema = agregar(r.producto, 1);
+      est.aviso = problema ? { tipo: 'error', texto: `${r.producto.nombre}: ${problema}` } : { tipo: 'ok', texto: `Agregado: ${r.producto.nombre}` };
+    } else {
+      est.sel = r.producto.id; // por peso sin etiqueta: se pide la cantidad
+    }
+    App.vistas.vender();
+  }
+  App.escanearEnVenta = codigo => { est.sel = null; procesarCodigo(codigo); };
 
   function resultados() {
     return UI.listaProductos(Logica.buscarProductos(est.busqueda), 'venta-elegir', { restarCarrito: enCarrito, deshabilitarSinStock: true });
@@ -110,6 +137,7 @@
       <p class="ticket-total"><span>Total</span><strong>${Formato.plata(totalCarrito())}</strong></p>
       <button type="button" class="btn btn-primary btn-lg w-100" data-accion="venta-cobrar" ${filas.length ? '' : 'disabled'}><i class="bi bi-cash-coin"></i> Cobrar</button>
       ${filas.length ? '<button type="button" class="btn btn-link w-100 mt-1" data-accion="venta-vaciar">Vaciar ticket</button>' : ''}
+      ${!filas.length && est.ultima ? `<button type="button" class="btn btn-outline-secondary w-100 mt-2" data-accion="venta-reimprimir"><i class="bi bi-printer"></i> Reimprimir el último ticket (N.º ${est.ultima.id})</button>` : ''}
     </div></aside>`;
   }
 
@@ -117,22 +145,19 @@
 
   App.entradas['venta-buscar'] = el => {
     est.busqueda = el.value;
-    $('#venta-aviso').textContent = '';
+    $('#venta-aviso').innerHTML = '';
     $('#venta-resultados').innerHTML = resultados();
   };
+  // Enter en el buscador: si es un código (lector o tipeado) se procesa; si es texto, se elige el primer resultado.
   App.acciones['venta-enter'] = el => {
-    const p = Logica.productoPorCodigo(el.value);
-    if (p && p.tipo_medida === 'unidad') {
-      const problema = agregar(p, 1);
-      est.busqueda = '';
-      est.aviso = problema ? `${p.nombre}: ${problema}` : `Agregado: ${p.nombre}`;
-      App.vistas.vender();
-      return;
-    }
-    if (p) { est.sel = p.id; est.busqueda = ''; App.vistas.vender(); return; }
+    const texto = el.value.trim();
+    const r = Logica.interpretarCodigo(texto);
+    if (r.producto || (r.error && /^\d{6,}$/.test(texto))) { procesarCodigo(texto); return; }
     const primero = $('#venta-resultados .resultado:not([disabled])');
     if (primero) primero.click();
   };
+  App.acciones['venta-crear-codigo'] = el => App.abrirProducto(null, () => UI.navegar('vender'), { codigo: el.dataset.codigo });
+  App.acciones['venta-reimprimir'] = () => { if (est.ultima) Impresora.ticketVenta(est.ultima.id, { pagaCon: est.ultima.pagaCon }); };
   App.acciones['venta-elegir'] = el => { est.sel = +el.dataset.id; est.busqueda = ''; App.vistas.vender(); };
   App.acciones['venta-cambiar'] = () => { est.sel = null; App.vistas.vender(); };
   App.acciones['venta-atajo'] = el => {
@@ -216,6 +241,32 @@
     if (c.limite_credito != null && despues > c.limite_credito) info.classList.add('text-danger', 'fw-semibold');
   };
 
+  // Después de cobrar: según la configuración, imprime solo, pregunta o solo avisa.
+  function ventaRegistrada(v, pagaCon) {
+    const { alVender } = Logica.config('ticket');
+    const vuelto = pagaCon ? pagaCon - v.total : null;
+    if (alVender === 'siempre') Impresora.ticketVenta(v.id, { pagaCon });
+    if (alVender !== 'preguntar') {
+      UI.cerrarDialogo();
+      UI.avisar(`Venta de ${Formato.plata(v.total)} registrada${vuelto != null ? `. Vuelto: ${Formato.plata(vuelto)}` : ''}`);
+      return;
+    }
+    UI.abrirDialogo({
+      titulo: 'Venta registrada',
+      cuerpo: `<div class="text-center py-2">
+          <i class="bi bi-check-circle-fill text-success" style="font-size:3rem"></i>
+          <div class="fs-5 mt-2">Total ${Formato.plata(v.total)} <span class="text-body-secondary">· ${Formato.medio(v.medio_pago)}</span></div>
+          ${vuelto != null ? `<div class="display-6 fw-bold mt-2">Vuelto ${Formato.plata(vuelto)}</div>` : ''}
+        </div>`,
+      pie: `<button type="button" class="btn btn-outline-secondary" data-accion="venta-imprimir-y-cerrar" data-id="${v.id}"><i class="bi bi-printer"></i> Imprimir ticket</button>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal" data-foco>Listo</button>`
+    }, { ancho: 'chico' });
+  }
+  App.acciones['venta-imprimir-y-cerrar'] = el => {
+    Impresora.ticketVenta(+el.dataset.id, { pagaCon: est.ultima && est.ultima.id === +el.dataset.id ? est.ultima.pagaCon : null });
+    UI.cerrarDialogo();
+  };
+
   App.envios.cobro = (form, e, forzarLimite = false) => {
     const f = form.elements, medio = f.medio.value, err = $('#dlg-error');
     let clienteId = null;
@@ -235,10 +286,9 @@
       const v = Logica.registrarVenta(est.carrito.map(r => ({ ...r })), { medio_pago: medio, cliente_id: clienteId, forzarLimite });
       est.carrito = [];
       est.sel = null;
-      UI.cerrarDialogo();
-      const vuelto = medio === 'efectivo' && pagaCon >= v.total ? `. Vuelto: ${Formato.plata(pagaCon - v.total)}` : '';
-      UI.avisar(`Venta de ${Formato.plata(v.total)} registrada${vuelto}`);
+      est.ultima = { id: v.id, pagaCon: medio === 'efectivo' && pagaCon >= v.total ? pagaCon : null };
       UI.render();
+      ventaRegistrada(v, est.ultima.pagaCon);
     } catch (x) {
       if (x.codigo === 'LIMITE' && confirm(`${x.message}\n\n¿Fiar igual?`)) { App.envios.cobro(form, e, true); return; }
       err.textContent = x.message;

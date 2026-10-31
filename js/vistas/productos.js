@@ -51,7 +51,7 @@
   }
 
   // ---------- Formulario de producto ----------
-  function abrirProducto(id = null, alGuardar = null) {
+  function abrirProducto(id = null, alGuardar = null, { codigo = '' } = {}) {
     const p = id ? DB.buscar('productos', id) : null;
     const lotes = p ? Logica.lotesDe(p.id) : [];
     const tipo = p ? p.tipo_medida : 'unidad';
@@ -76,7 +76,7 @@
       cuerpo: `${H.error()}
         <div class="row gx-3">
           <div class="col-12">${H.campo('Nombre', `<input class="form-control" name="nombre" value="${esc(p?.nombre)}" autocomplete="off" data-foco>`)}</div>
-          <div class="col-md-6">${H.campo(`Código de barras ${opcional}`, `<input class="form-control" name="codigo" value="${esc(p?.codigo)}" inputmode="numeric" autocomplete="off">`)}</div>
+          <div class="col-md-6">${H.campo(`Código de barras ${opcional}`, `<input class="form-control" name="codigo" value="${esc(p ? p.codigo : codigo)}" inputmode="numeric" autocomplete="off">`, 'Escaneá el producto con el lector. En productos por peso con balanza, va el PLU.')}</div>
           <div class="col-md-6">${H.campo('Categoría', `<select class="form-select" name="categoria_id" data-cambio="pf-categoria">${UI.opcionesCategorias(p?.categoria_id || null, { conNueva: true })}</select>`)}</div>
           <div class="col-12" data-bloque="categoria-nueva" hidden>${H.campo('Nombre de la categoría nueva', '<input class="form-control" name="categoria_nueva" autocomplete="off">')}</div>
           <div class="col-12 mb-3">
@@ -138,6 +138,13 @@
     }, { ancho: 'normal' });
   }
   App.abrirProducto = abrirProducto;
+
+  // Escanear en la pantalla de productos: abre el producto, o uno nuevo con ese código.
+  App.escanearEnProductos = codigo => {
+    const existente = DB.todos('productos').find(x => x.codigo === codigo.trim());
+    if (existente) abrirProducto(existente.id);
+    else abrirProducto(null, null, { codigo: codigo.trim() });
+  };
 
   function recalcularPrecio(form) {
     const f = form.elements, costo = num(f.costo.value), pct = num(f.porcentaje.value);

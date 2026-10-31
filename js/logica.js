@@ -19,7 +19,7 @@ const ROLES = {
 
 // Pantallas que puede abrir cada rol. El administrador ve todo.
 const PERMISOS = {
-  admin: ['inicio', 'vender', 'clientes', 'productos', 'mercaderia', 'caja', 'informes', 'usuarios'],
+  admin: ['inicio', 'vender', 'clientes', 'productos', 'mercaderia', 'caja', 'informes', 'usuarios', 'configuracion'],
   vendedor: ['inicio', 'vender', 'clientes', 'mercaderia', 'caja']
 };
 
@@ -737,6 +737,85 @@ const Logica = {
     DB.guardar();
   },
 
+  // ---------- Configuración del negocio, la impresora y la balanza ----------
+  CONFIG_INICIAL: {
+    negocio: { nombre: 'Almacén', direccion: '', telefono: '', cuit: '', pie: '¡Gracias por su compra!' },
+    ticket: { ancho: 80, alVender: 'preguntar', copias: 1 },
+    balanza: { activa: false, prefijo: '20', digitosPlu: 5, valor: 'peso' }
+  },
+  config(seccion) {
+    const guardada = (DB.data.config && DB.data.config[seccion]) || {};
+    return { ...Logica.CONFIG_INICIAL[seccion], ...guardada };
+  },
+  guardarConfig(seccion, datos) {
+    const c = { ...Logica.config(seccion), ...datos };
+    if (seccion === 'negocio') {
+      c.nombre = String(c.nombre || '').trim();
+      if (!c.nombre) throw error('Ingresá el nombre del negocio.');
+      ['direccion', 'telefono', 'cuit', 'pie'].forEach(k => { c[k] = String(c[k] || '').trim(); });
+    }
+    if (seccion === 'ticket') {
+      if (![58, 80].includes(c.ancho)) throw error('Elegí el ancho del papel.');
+      if (!['preguntar', 'siempre', 'nunca'].includes(c.alVender)) throw error('Elegí qué hacer al vender.');
+      if (![1, 2].includes(c.copias)) throw error('Las copias pueden ser 1 o 2.');
+    }
+    if (seccion === 'balanza') {
+      if (!/^2\d?$/.test(c.prefijo)) throw error('El prefijo de balanza es 2 o dos dígitos que empiezan con 2 (por ejemplo 20).');
+      const valor = 12 - c.prefijo.length - c.digitosPlu;
+      if (!Number.isInteger(c.digitosPlu) || c.digitosPlu < 4 || c.digitosPlu > 6 || valor < 4 || valor > 6) {
+        throw error('Con ese prefijo, el código de producto (PLU) tiene que tener entre 4 y 6 dígitos y dejar lugar para el peso o el importe.');
+      }
+      if (!['peso', 'importe'].includes(c.valor)) throw error('Elegí si la etiqueta trae el peso o el importe.');
+    }
+    return DB.transaccion(() => { DB.data.config[seccion] = c; return c; });
+  },
+
+  // ---------- Códigos de barras ----------
+  digitoControlEAN(doceDigitos) {
+    const suma = doceDigitos.split('').reduce((s, d, i) => s + Number(d) * (i % 2 ? 3 : 1), 0);
+    return String((10 - (suma % 10)) % 10);
+  },
+  ean13Valido(codigo) {
+    return /^\d{13}$/.test(codigo) && Logica.digitoControlEAN(codigo.slice(0, 12)) === codigo[12];
+  },
+
+  // Interpreta lo que manda el lector: un código de producto o una etiqueta de balanza (EAN-13 de peso variable).
+  // Devuelve { producto, cantidad (o null), balanza, detalle } o { error }.
+  interpretarCodigo(texto) {
+    const codigo = String(texto || '').replace(/\s/g, '');
+    if (!codigo) return { error: 'Código vacío.' };
+    const exacto = Logica.productoPorCodigo(codigo);
+    if (exacto) return { producto: exacto, cantidad: null, balanza: false, codigo };
+
+    const b = Logica.config('balanza');
+    if (b.activa && /^\d{13}$/.test(codigo) && codigo.startsWith(b.prefijo)) {
+      if (!Logica.ean13Valido(codigo)) return { error: 'La etiqueta de balanza no se leyó bien (dígito de control incorrecto). Volvé a escanearla.', codigo };
+      const plu = codigo.slice(b.prefijo.length, b.prefijo.length + b.digitosPlu);
+      const valor = Number(codigo.slice(b.prefijo.length + b.digitosPlu, 12));
+      const producto = Logica.productosActivos().find(p => p.codigo && p.tipo_medida === 'peso' && Number(p.codigo) === Number(plu));
+      if (!producto) return { error: `La etiqueta es del PLU ${plu}, pero no hay un producto por peso con ese código.`, codigo, plu };
+      // Peso en gramos, o importe en pesos que se convierte a gramos con el precio por kilo
+      const cantidad = b.valor === 'peso' ? valor : Math.round(valor * 1000 / producto.precio_venta);
+      if (!(cantidad > 0)) return { error: 'La etiqueta de balanza trae peso o importe en cero.', codigo };
+      return { producto, cantidad, balanza: true, codigo,
+        detalle: b.valor === 'peso' ? `${Formato.numero(valor)} g` : `${Formato.plata(valor)} (${Formato.numero(cantidad)} g)` };
+    }
+    return { error: `No hay ningún producto con el código ${codigo}.`, codigo, desconocido: true };
+  },
+
+  // Datos ya calculados para imprimir el ticket de una venta.
+  datosTicket(ventaId) {
+    const v = DB.buscar('ventas', ventaId);
+    const renglones = DB.todos('detalle_venta').filter(d => d.venta_id === ventaId).map(d => {
+      const p = DB.buscar('productos', d.producto_id);
+      return { nombre: p.nombre, detalle: `${Formato.cantidad(p, d.cantidad)} x ${Formato.plata(d.precio_unitario)}${p.tipo_medida === 'peso' ? '/kg' : ''}`,
+        subtotal: Logica.subtotal(p, d.precio_unitario, d.cantidad), mayorista: d.es_mayorista };
+    });
+    const cliente = v.cliente_id ? DB.buscar('clientes', v.cliente_id) : null;
+    return { venta: v, renglones, cliente, saldoCliente: cliente ? Logica.saldoCliente(cliente.id) : null,
+      atendio: Logica.nombreUsuario(v.usuario_id), negocio: Logica.config('negocio') };
+  },
+
   // ---------- Importar productos desde CSV ----------
   COLUMNAS_IMPORTACION: {
     nombre: ['nombre', 'descripcion', 'producto'],
@@ -899,7 +978,9 @@ function cargarEjemplo() {
   });
 
   const leche = producto('Leche entera 1 L', '7790001000011', 'Lácteos', 'unidad', 1000, 1300, 6);
-  const queso = producto('Queso cremoso', null, 'Fiambrería', 'peso', 8000, 11200, 500);
+  const queso = producto('Queso cremoso', '00101', 'Fiambrería', 'peso', 8000, 11200, 500); // 00101 = PLU de la balanza
+  DB.data.config.balanza = { ...Logica.CONFIG_INICIAL.balanza, activa: true };
+  DB.data.config.negocio = { ...Logica.CONFIG_INICIAL.negocio, nombre: 'Almacén Don Pepe', direccion: 'Av. Siempreviva 742', telefono: '381 555-0100' };
   const yerba = producto('Yerba mate 1 kg', '7790002000028', 'Almacén', 'unidad', 3500, 4400, 4);
   const fideos = producto('Fideos tirabuzón 500 g', '7790003000035', 'Almacén', 'unidad', 900, 1220, 5);
   const pan = producto('Pan lactal', '7790004000042', 'Panificados', 'unidad', 1800, 2340, 3);

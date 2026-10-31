@@ -79,6 +79,24 @@
     location.reload();
   };
 
+  // ---------- Lector de código de barras ----------
+  // Si se escanea sin estar en un campo, se manda el código a la pantalla que corresponda.
+  Lector.iniciar(codigo => {
+    if (!UI.usuario || $('#dlg').classList.contains('show')) return;
+    const v = UI.vistaActual();
+    if (v === 'configuracion') return App.probarLector(codigo);
+    if (v === 'productos' && UI.esAdmin()) return App.escanearEnProductos(codigo);
+    if (v === 'mercaderia') return App.escanearEnMercaderia(codigo);
+    if (v !== 'vender') {
+      if (!Logica.cajaAbierta()) { UI.avisar('Abrí la caja para empezar a vender.'); return; }
+      // Primero se cambia de pantalla y después se agrega, así se ve el aviso de lo escaneado
+      window.addEventListener('hashchange', () => App.escanearEnVenta(codigo), { once: true });
+      UI.navegar('vender');
+      return;
+    }
+    App.escanearEnVenta(codigo);
+  });
+
   DB.cargar();
   UI.render();
 })();

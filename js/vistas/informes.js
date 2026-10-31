@@ -58,18 +58,20 @@
         </table></div></div>
         <h2 class="h5">Ventas</h2>
         <div class="card shadow-sm"><div class="table-responsive"><table class="table table-hover align-middle mb-0">
-          <thead><tr><th>N.º</th><th>${unDia ? 'Hora' : 'Fecha'}</th><th>Detalle</th><th>Pago</th><th>Atendió</th><th class="num">Total</th></tr></thead>
+          <thead><tr><th>N.º</th><th>${unDia ? 'Hora' : 'Fecha'}</th><th>Detalle</th><th>Pago</th><th>Atendió</th><th class="num">Total</th><th></th></tr></thead>
           <tbody>${inf.ventas.slice().reverse().map(v => {
             const cliente = v.cliente_id ? DB.buscar('clientes', v.cliente_id) : null;
             return `<tr><td>${v.id}</td><td class="text-nowrap">${unDia ? Formato.hora(v.fecha_hora) : Formato.fechaHora(v.fecha_hora)}</td>
               <td class="small">${esc(Logica.detalleTexto(v.id))}</td>
               <td>${Formato.medio(v.medio_pago)}${cliente ? `<span class="sub">${esc(cliente.nombre)}</span>` : ''}</td>
               <td>${esc(Logica.nombreUsuario(v.usuario_id)) || '—'}</td>
-              <td class="num">${Formato.plata(v.total)}</td></tr>`;
+              <td class="num">${Formato.plata(v.total)}</td>
+              <td class="text-end"><button type="button" class="btn btn-sm btn-outline-secondary" data-accion="ticket-reimprimir" data-id="${v.id}" title="Imprimir ticket" aria-label="Imprimir ticket de la venta ${v.id}"><i class="bi bi-printer"></i></button></td></tr>`;
           }).join('')}</tbody>
         </table></div></div>` : '<div class="alert alert-light border">No hay ventas en este período.</div>'}`;
   };
 
+  App.acciones['ticket-reimprimir'] = el => Impresora.ticketVenta(+el.dataset.id);
   App.acciones['informe-rango'] = el => { est.desde = el.dataset.desde; est.hasta = el.dataset.hasta; App.vistas.informes(); };
   App.cambios['informe-desde'] = el => { if (!el.value) return; est.desde = el.value; if (est.hasta < est.desde) est.hasta = est.desde; App.vistas.informes(); };
   App.cambios['informe-hasta'] = el => { if (!el.value) return; est.hasta = el.value; if (est.desde > est.hasta) est.desde = est.hasta; App.vistas.informes(); };

@@ -119,6 +119,13 @@
     const primero = $('#ingreso-resultados .resultado');
     if (primero) primero.click();
   };
+  App.escanearEnMercaderia = codigo => {
+    const r = Logica.interpretarCodigo(codigo);
+    est.mercTab = 'ingresar';
+    if (r.producto && r.producto.controla_stock) { est.ingreso = nuevoIngreso(r.producto); redibujar(); return; }
+    redibujar();
+    UI.avisar(r.error || `${r.producto.nombre} no lleva control de stock.`);
+  };
   App.acciones['ingreso-elegir'] = el => { est.ingreso = nuevoIngreso(DB.buscar('productos', +el.dataset.id)); redibujar(); };
   App.acciones['ingreso-cambiar'] = () => { est.ingreso = nuevoIngreso(); redibujar(); };
   App.acciones['ingreso-nuevo'] = () => App.abrirProducto(null, p => {
