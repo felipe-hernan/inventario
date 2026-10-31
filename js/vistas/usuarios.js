@@ -7,6 +7,7 @@
         Las personas no pueden crearse una cuenta: el administrador carga cada usuario y le pasa su contraseña.
         El <strong>administrador</strong> ve todo el sistema. El <strong>vendedor</strong> vende, cobra fiado, ingresa mercadería y maneja la caja,
         pero no ve productos, informes ni ganancias.
+        Un usuario con operaciones registradas no se elimina, se desactiva. Siempre tiene que quedar al menos un administrador activo.
       </div>
       <div class="card shadow-sm"><div class="table-responsive">
         <table class="table table-hover align-middle mb-0">
@@ -37,7 +38,7 @@
         ${u ? `<div class="form-check form-switch">${''}<input class="form-check-input" type="checkbox" role="switch" id="u-activo" name="activo" ${u.activo ? 'checked' : ''}>
           <label class="form-check-label" for="u-activo"><strong>Usuario activo</strong><span class="form-text d-block mt-0">Si lo desactivás, no puede ingresar. Sus ventas quedan registradas.</span></label></div>` : ''}`,
       pie: UI.pie('Guardar', {
-        izquierda: u && u.rol === 'vendedor' && u.id !== UI.usuario.id
+        izquierda: u && u.id !== UI.usuario.id
           ? `<button type="button" class="btn btn-outline-danger" data-accion="usuario-borrar" data-id="${u.id}"><i class="bi bi-trash"></i> Eliminar</button>` : ''
       })
     }, { ancho: 'chico' });
@@ -46,6 +47,11 @@
   App.acciones['usuario-borrar'] = el => {
     const u = DB.buscar('usuarios', +el.dataset.id);
     const motivo = Logica.motivoNoBorrarUsuario(u.id);
+    // Si es el último administrador, tampoco se puede desactivar: solo se avisa
+    if (motivo && motivo.startsWith('es el único administrador')) {
+      alert(`${u.nombre} no se puede eliminar ni desactivar porque ${motivo}. Primero creá o activá otro administrador.`);
+      return;
+    }
     if (motivo) {
       if (!u.activo) { alert(`${u.nombre} no se puede eliminar porque ${motivo}. Ya está desactivado, así que no puede ingresar.`); return; }
       if (!confirm(`${u.nombre} no se puede eliminar porque ${motivo}: se perdería quién hizo cada una.\n\n¿Desactivarlo? No va a poder ingresar y su historial se conserva.`)) return;
@@ -55,7 +61,7 @@
       } catch (e) { $('#dlg-error').textContent = e.message; }
       return;
     }
-    if (!confirm(`¿Eliminar a ${u.nombre} (usuario «${u.usuario}») definitivamente?`)) return;
+    if (!confirm(`¿Eliminar a ${u.nombre} (usuario «${u.usuario}», ${ROLES[u.rol].toLowerCase()}) definitivamente?`)) return;
     try {
       Logica.borrarUsuario(u.id);
       UI.cerrarDialogo(); UI.avisar('Usuario eliminado'); UI.render();

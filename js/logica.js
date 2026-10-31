@@ -173,8 +173,11 @@ const Logica = {
   motivoNoBorrarUsuario(id) {
     const u = DB.buscar('usuarios', id);
     if (!u) return 'el usuario no existe';
-    if (u.rol !== 'vendedor') return 'solo se pueden eliminar vendedores (un administrador se desactiva)';
     if (id === Logica.usuarioActualId) return 'es tu propio usuario';
+    // Nunca puede quedar el sistema sin un administrador activo: nadie podría crear usuarios ni configurar
+    if (u.rol === 'admin' && !DB.todos('usuarios').some(x => x.id !== id && x.rol === 'admin' && x.activo)) {
+      return 'es el único administrador activo y el sistema quedaría sin nadie que lo administre';
+    }
     const usos = Logica.usosUsuario(id);
     if (usos) return `tiene ${usos} ${usos === 1 ? 'operación registrada' : 'operaciones registradas'} (ventas, cajas, cobros…)`;
     return null;
