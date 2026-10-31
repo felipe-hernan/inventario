@@ -161,6 +161,31 @@ const Logica = {
       return DB.insertar('usuarios', { ...fila, fecha_alta: Fechas.hoy() });
     });
   },
+  // Cuántas operaciones registró un usuario: si tiene alguna, no se borra (se desactiva).
+  usosUsuario(id) {
+    const cuenta = (tabla, campos) => DB.todos(tabla).filter(f => campos.some(c => f[c] === id)).length;
+    return cuenta('ventas', ['usuario_id']) + cuenta('cajas', ['usuario_apertura_id', 'usuario_cierre_id']) +
+      cuenta('pagos_venta', ['usuario_id', 'verificado_por', 'autorizado_por']) +
+      cuenta('pagos_clientes', ['usuario_id', 'verificado_por', 'autorizado_por']) +
+      cuenta('movimientos_caja', ['usuario_id']) + cuenta('lotes', ['usuario_id']) +
+      cuenta('ajustes_stock', ['usuario_id']) + cuenta('verificaciones_pago', ['usuario_id']);
+  },
+  motivoNoBorrarUsuario(id) {
+    const u = DB.buscar('usuarios', id);
+    if (!u) return 'el usuario no existe';
+    if (u.rol !== 'vendedor') return 'solo se pueden eliminar vendedores (un administrador se desactiva)';
+    if (id === Logica.usuarioActualId) return 'es tu propio usuario';
+    const usos = Logica.usosUsuario(id);
+    if (usos) return `tiene ${usos} ${usos === 1 ? 'operación registrada' : 'operaciones registradas'} (ventas, cajas, cobros…)`;
+    return null;
+  },
+  borrarUsuario(id) {
+    if (!Logica.esAdminActual()) throw error('Solo el administrador puede eliminar usuarios.');
+    const motivo = Logica.motivoNoBorrarUsuario(id);
+    if (motivo) throw error(`No se puede eliminar porque ${motivo}. Podés desactivarlo.`);
+    return DB.transaccion(() => DB.borrar('usuarios', id));
+  },
+
   cambiarClavePropia(actual, nueva) {
     const u = DB.buscar('usuarios', Logica.usuarioActualId);
     if (!u || u.clave_hash !== hashClave(actual, u.usuario)) throw error('La contraseña actual no es correcta.');
@@ -311,6 +336,24 @@ const Logica = {
 
   cambiarActivo(id, activo) {
     return DB.transaccion(() => Object.assign(DB.buscar('productos', id), { activo }));
+  },
+
+  // Un producto se puede eliminar solo si nunca se vendió ni se ajustó. Si no, se da de baja.
+  motivoNoBorrarProducto(id) {
+    const ventas = new Set(DB.todos('detalle_venta').filter(d => d.producto_id === id).map(d => d.venta_id)).size;
+    if (ventas) return `tiene ${ventas} ${ventas === 1 ? 'venta registrada' : 'ventas registradas'}`;
+    const lotes = new Set(Logica.lotesDe(id).map(l => l.id));
+    if (DB.todos('ajustes_stock').some(a => lotes.has(a.lote_id))) return 'tiene ajustes de stock registrados';
+    return null;
+  },
+  borrarProducto(id) {
+    if (!Logica.esAdminActual()) throw error('Solo el administrador puede eliminar productos.');
+    const motivo = Logica.motivoNoBorrarProducto(id);
+    if (motivo) throw error(`No se puede eliminar porque ${motivo}. Podés darlo de baja.`);
+    return DB.transaccion(() => {
+      Logica.lotesDe(id).forEach(l => DB.borrar('lotes', l.id)); // el stock cargado por error se va con el producto
+      DB.borrar('productos', id);
+    });
   },
 
   // ---------- Lotes y stock ----------
@@ -499,6 +542,7 @@ const Logica = {
     return DB.transaccion(() => { const o = lista[i].orden; lista[i].orden = lista[j].orden; lista[j].orden = o; });
   },
   borrarMedio(id) {
+    if (!Logica.esAdminActual()) throw error('Solo el administrador puede eliminar medios de pago.');
     if (Logica.medioUsado(id)) throw error('Ese medio ya tiene cobros registrados: desactivalo en lugar de borrarlo.');
     const m = DB.buscar('medios_pago', id);
     if (m.tipo === 'efectivo' && !DB.todos('medios_pago').some(x => x.id !== id && x.tipo === 'efectivo' && x.activo)) {

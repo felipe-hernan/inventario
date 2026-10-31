@@ -25,7 +25,7 @@
               <div class="flex-grow-1 min-w-0"><div class="fw-semibold text-truncate">${esc(m.nombre)}</div><div class="small text-body-secondary">${TIPOS_PAGO[m.tipo]}${m.activo ? '' : ' · desactivado'}</div></div>
               <div class="form-check form-switch mb-0" title="Activo"><input class="form-check-input" type="checkbox" role="switch" aria-label="Activo" data-cambio="medio-activo" data-id="${m.id}" ${m.activo ? 'checked' : ''}></div>
               <button type="button" class="btn btn-sm btn-outline-secondary" data-accion="medio-editar" data-id="${m.id}" aria-label="Editar ${esc(m.nombre)}"><i class="bi bi-pencil"></i></button>
-              ${Logica.medioUsado(m.id) ? '' : `<button type="button" class="btn btn-sm btn-outline-danger" data-accion="medio-borrar" data-id="${m.id}" aria-label="Borrar ${esc(m.nombre)}"><i class="bi bi-trash"></i></button>`}
+              <button type="button" class="btn btn-sm btn-outline-danger" data-accion="medio-borrar" data-id="${m.id}" aria-label="Eliminar ${esc(m.nombre)}" title="Eliminar"><i class="bi bi-trash"></i></button>
             </li>`).join('')}</ul>
             <button type="button" class="btn btn-primary" data-accion="medio-nuevo"><i class="bi bi-plus-lg"></i> Agregar medio de pago</button>
           </div></section>
@@ -224,8 +224,15 @@
   };
   App.acciones['medio-borrar'] = el => {
     const m = DB.buscar('medios_pago', +el.dataset.id);
-    if (!confirm(`¿Borrar «${m.nombre}»?`)) return;
-    try { Logica.borrarMedio(m.id); App.vistas.configuracion(); }
+    if (Logica.medioUsado(m.id)) {
+      if (!m.activo) { alert(`«${m.nombre}» no se puede eliminar porque ya tiene cobros registrados. Ya está desactivado, así que no aparece al cobrar.`); return; }
+      if (!confirm(`«${m.nombre}» no se puede eliminar porque ya tiene cobros registrados: la caja y los informes dejarían de saber cómo se cobró.\n\n¿Desactivarlo? Deja de aparecer al cobrar y su historial se conserva.`)) return;
+      try { Logica.cambiarActivoMedio(m.id, false); UI.avisar('Medio de pago desactivado'); App.vistas.configuracion(); }
+      catch (e) { $('#cfg-medios-error').textContent = e.message; }
+      return;
+    }
+    if (!confirm(`¿Eliminar «${m.nombre}» definitivamente?`)) return;
+    try { Logica.borrarMedio(m.id); UI.avisar('Medio de pago eliminado'); App.vistas.configuracion(); }
     catch (e) { $('#cfg-medios-error').textContent = e.message; }
   };
 

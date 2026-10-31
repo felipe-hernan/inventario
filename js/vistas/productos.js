@@ -133,7 +133,9 @@
             </div>
           </fieldset>`}`,
       pie: UI.pie('Guardar producto', {
-        izquierda: p ? `<button type="button" class="btn btn-outline-danger" data-accion="producto-baja" data-id="${p.id}">${p.activo ? 'Dar de baja' : 'Reactivar'}</button>` : ''
+        izquierda: p ? `<div class="d-flex flex-wrap gap-2">
+          <button type="button" class="btn btn-outline-secondary" data-accion="producto-baja" data-id="${p.id}">${p.activo ? 'Dar de baja' : 'Reactivar'}</button>
+          <button type="button" class="btn btn-outline-danger" data-accion="producto-borrar" data-id="${p.id}"><i class="bi bi-trash"></i> Eliminar</button></div>` : ''
       })
     }, { ancho: 'normal' });
   }
@@ -229,6 +231,29 @@
     UI.avisar(p.activo ? 'Producto reactivado' : 'Producto dado de baja');
     UI.render();
   };
+  App.acciones['producto-borrar'] = el => {
+    const p = DB.buscar('productos', +el.dataset.id);
+    const motivo = Logica.motivoNoBorrarProducto(p.id);
+    if (motivo) {
+      if (!p.activo) { alert(`«${p.nombre}» no se puede eliminar porque ${motivo}. Ya está dado de baja, así que no aparece en ventas ni avisos.`); return; }
+      if (!confirm(`«${p.nombre}» no se puede eliminar porque ${motivo}: borrarlo dejaría esas ventas sin producto.\n\n¿Darlo de baja? Deja de aparecer en ventas y avisos, y su historial se conserva.`)) return;
+      Logica.cambiarActivo(p.id, false);
+      UI.cerrarDialogo();
+      UI.avisar('Producto dado de baja');
+      UI.render();
+      return;
+    }
+    const lotes = Logica.lotesDe(p.id).filter(l => l.cantidad_actual > 0);
+    const stock = lotes.length ? `\n\nTambién se borra el stock que tiene cargado (${Formato.cantidad(p, lotes.reduce((s, l) => s + l.cantidad_actual, 0))}).` : '';
+    if (!confirm(`¿Eliminar «${p.nombre}» definitivamente? No se puede deshacer.${stock}`)) return;
+    try {
+      Logica.borrarProducto(p.id);
+      UI.cerrarDialogo();
+      UI.avisar('Producto eliminado');
+      UI.render();
+    } catch (e) { $('#dlg-error').textContent = e.message; }
+  };
+
   App.entradas['productos-buscar'] = el => { est.busqueda = el.value; $('#tbody-productos').innerHTML = filas(); };
   App.cambios['productos-categoria'] = el => { est.categoria = el.value ? +el.value : null; $('#tbody-productos').innerHTML = filas(); };
   App.cambios['productos-bajas'] = el => { est.bajas = el.checked; $('#tbody-productos').innerHTML = filas(); };

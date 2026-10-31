@@ -36,9 +36,31 @@
           'Al menos 6 caracteres. Pasásela a la persona; después la puede cambiar desde «Mi cuenta».')}
         ${u ? `<div class="form-check form-switch">${''}<input class="form-check-input" type="checkbox" role="switch" id="u-activo" name="activo" ${u.activo ? 'checked' : ''}>
           <label class="form-check-label" for="u-activo"><strong>Usuario activo</strong><span class="form-text d-block mt-0">Si lo desactivás, no puede ingresar. Sus ventas quedan registradas.</span></label></div>` : ''}`,
-      pie: UI.pie('Guardar')
+      pie: UI.pie('Guardar', {
+        izquierda: u && u.rol === 'vendedor' && u.id !== UI.usuario.id
+          ? `<button type="button" class="btn btn-outline-danger" data-accion="usuario-borrar" data-id="${u.id}"><i class="bi bi-trash"></i> Eliminar</button>` : ''
+      })
     }, { ancho: 'chico' });
   }
+
+  App.acciones['usuario-borrar'] = el => {
+    const u = DB.buscar('usuarios', +el.dataset.id);
+    const motivo = Logica.motivoNoBorrarUsuario(u.id);
+    if (motivo) {
+      if (!u.activo) { alert(`${u.nombre} no se puede eliminar porque ${motivo}. Ya está desactivado, así que no puede ingresar.`); return; }
+      if (!confirm(`${u.nombre} no se puede eliminar porque ${motivo}: se perdería quién hizo cada una.\n\n¿Desactivarlo? No va a poder ingresar y su historial se conserva.`)) return;
+      try {
+        Logica.guardarUsuario({ nombre: u.nombre, usuario: u.usuario, rol: u.rol, activo: false }, u.id);
+        UI.cerrarDialogo(); UI.avisar('Usuario desactivado'); UI.render();
+      } catch (e) { $('#dlg-error').textContent = e.message; }
+      return;
+    }
+    if (!confirm(`¿Eliminar a ${u.nombre} (usuario «${u.usuario}») definitivamente?`)) return;
+    try {
+      Logica.borrarUsuario(u.id);
+      UI.cerrarDialogo(); UI.avisar('Usuario eliminado'); UI.render();
+    } catch (e) { $('#dlg-error').textContent = e.message; }
+  };
 
   App.acciones['usuario-nuevo'] = () => formUsuario();
   App.acciones['usuario-editar'] = el => formUsuario(+el.dataset.id);
