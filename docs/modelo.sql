@@ -18,9 +18,12 @@ CREATE TABLE usuarios (
   acceso_hasta              TIMESTAMP,                        -- soporte: habilitado hasta esta hora (lo define el admin)
   debe_cambiar_clave        BOOLEAN NOT NULL DEFAULT TRUE,    -- contraseña provisoria: se cambia al ingresar
   codigo_recuperacion_hash  VARCHAR(100),                     -- admins: código de un solo uso, guardado como hash
+  email                     VARCHAR(150) UNIQUE,              -- obligatorio para admin y soporte; opcional para vendedores
+  email_verificado_en       TIMESTAMP,                        -- a futuro: se completa al confirmar el link de verificación
   fecha_alta                DATE NOT NULL DEFAULT CURRENT_DATE
 );
 CREATE UNIQUE INDEX ux_un_solo_soporte ON usuarios(rol) WHERE rol = 'soporte';
+ALTER TABLE usuarios ADD CONSTRAINT ck_email_obligatorio CHECK (rol NOT IN ('admin', 'soporte') OR email IS NOT NULL);
 
 -- Quién hizo qué con usuarios y accesos: altas, reseteos, cambios de rol, soporte, recuperaciones.
 CREATE TABLE auditoria (

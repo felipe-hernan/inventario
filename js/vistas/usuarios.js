@@ -34,7 +34,8 @@
           <thead><tr><th>Nombre</th><th>Usuario</th><th>Rol</th><th>Estado</th><th></th></tr></thead>
           <tbody>${Logica.usuarios().map(u => `<tr class="${u.activo ? '' : 'text-body-secondary'}">
             <td>${esc(u.nombre)}${u.id === UI.usuario.id ? ' <span class="badge text-bg-light border">vos</span>' : ''}
-              ${u.protegido ? ' <span class="badge text-bg-light border" title="No se puede eliminar"><i class="bi bi-shield-lock"></i> Protegido</span>' : ''}</td>
+              ${u.protegido ? ' <span class="badge text-bg-light border" title="No se puede eliminar"><i class="bi bi-shield-lock"></i> Protegido</span>' : ''}
+              <span class="sub">${u.email ? `<i class="bi bi-envelope"></i> ${esc(u.email)}` : (ROLES_CON_EMAIL.includes(u.rol) ? '<span class="text-danger"><i class="bi bi-exclamation-circle"></i> Falta el correo</span>' : 'Sin correo')}</span></td>
             <td><code>${esc(u.usuario)}</code></td>
             <td><i class="bi bi-${{ admin: 'shield-lock', vendedor: 'person', soporte: 'tools' }[u.rol]}"></i> ${ROLES[u.rol]}</td>
             <td>${estadoUsuario(u)}</td>
@@ -81,7 +82,10 @@
         ${H.campo('Nombre de la persona', `<input class="form-control" name="nombre" value="${esc(u?.nombre)}" autocomplete="off" data-foco>`)}
         ${H.campo('Usuario para ingresar', `<input class="form-control" name="usuario" value="${esc(u?.usuario)}" autocomplete="off" autocapitalize="none" spellcheck="false">`,
           'Entre 3 y 20 letras o números, sin espacios. Por ejemplo: laura, juan.p')}
-        ${H.campo('Rol', `<select class="form-select" name="rol">${roles.map(([k, v]) => `<option value="${k}" ${(u ? u.rol : 'vendedor') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`)}
+        ${H.campo('Rol', `<select class="form-select" name="rol" data-cambio="u-rol">${roles.map(([k, v]) => `<option value="${k}" ${(u ? u.rol : 'vendedor') === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`)}
+        ${H.campo(`Correo electrónico <span class="fw-normal text-body-secondary" id="u-email-nota">${etiquetaEmail(u ? u.rol : 'vendedor')}</span>`,
+          `<input class="form-control" name="email" type="email" value="${esc(u?.email)}" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="nombre@ejemplo.com">`,
+          'Más adelante se va a usar para recuperar la contraseña y para la verificación en dos pasos.')}
         ${propio ? '<p class="small text-body-secondary">Tu propia contraseña se cambia desde «Mi cuenta», abajo en la barra lateral.</p><input type="hidden" name="clave" value="">'
           : H.campo(u ? 'Resetear contraseña <span class="fw-normal text-body-secondary">(opcional)</span>' : 'Contraseña provisoria',
             '<input class="form-control" name="clave" type="text" autocomplete="off" spellcheck="false">',
@@ -97,13 +101,16 @@
     }, { ancho: 'chico' });
   }
 
+  function etiquetaEmail(rol) { return ROLES_CON_EMAIL.includes(rol) ? '(obligatorio para administradores)' : '(opcional)'; }
+  App.cambios['u-rol'] = el => { $('#u-email-nota').textContent = etiquetaEmail(el.value); };
+
   App.acciones['usuario-nuevo'] = () => formUsuario();
   App.acciones['usuario-editar'] = el => formUsuario(+el.dataset.id);
   App.envios['usuario-guardar'] = form => {
     const f = form.elements;
     const id = form.dataset.id ? +form.dataset.id : null;
     try {
-      const u = Logica.guardarUsuario({ nombre: f.nombre.value, usuario: f.usuario.value, rol: f.rol.value, clave: f.clave.value, activo: f.activo ? f.activo.checked : true }, id);
+      const u = Logica.guardarUsuario({ nombre: f.nombre.value, usuario: f.usuario.value, rol: f.rol.value, email: f.email.value, clave: f.clave.value, activo: f.activo ? f.activo.checked : true }, id);
       UI.cerrarDialogo();
       UI.avisar(!id ? `Usuario creado. Pasale la contraseña provisoria a ${u.nombre}.` : f.clave.value ? `Contraseña provisoria cargada para ${u.nombre}.` : 'Usuario actualizado');
       UI.render();
@@ -132,7 +139,7 @@
       if (!u.activo) { alert(`${u.nombre} no se puede eliminar porque ${motivo}. Ya está desactivado, así que no puede ingresar.`); return; }
       if (!confirm(`${u.nombre} no se puede eliminar porque ${motivo}: se perdería quién hizo cada una.\n\n¿Desactivarlo? No va a poder ingresar y su historial se conserva.`)) return;
       try {
-        Logica.guardarUsuario({ nombre: u.nombre, usuario: u.usuario, rol: u.rol, activo: false }, u.id);
+        Logica.guardarUsuario({ nombre: u.nombre, usuario: u.usuario, rol: u.rol, email: u.email, activo: false }, u.id);
         UI.cerrarDialogo(); UI.avisar('Usuario desactivado'); UI.render();
       } catch (e) { $('#dlg-error').textContent = e.message; }
       return;

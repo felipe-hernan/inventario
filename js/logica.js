@@ -119,6 +119,10 @@ function generarCodigo(grupos = 3) {
   const texto = Array.from(azar, x => letras[x % letras.length]).join('');
   return texto.match(/.{4}/g).join('-');
 }
+// Correo: obligatorio para administradores y soporte (recuperación y verificación en dos pasos, a futuro).
+const ROLES_CON_EMAIL = ['admin', 'soporte'];
+const emailValido = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+
 const normalizarCodigo = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
 function error(mensaje, codigo) {
@@ -261,6 +265,10 @@ const Logica = {
     if (!/^[a-z0-9._-]{3,20}$/.test(usuario)) throw error('El usuario tiene que tener entre 3 y 20 letras o números, sin espacios ni acentos.');
     if (!ROLES[datos.rol]) throw error('Elegí el rol.');
     if (DB.todos('usuarios').some(u => u.id !== id && u.usuario === usuario)) throw error(`Ya existe el usuario «${usuario}».`);
+    const email = String(datos.email || '').trim().toLowerCase();
+    if (!email && ROLES_CON_EMAIL.includes(datos.rol)) throw error('El correo electrónico es obligatorio para los administradores.');
+    if (email && !emailValido(email)) throw error('El correo electrónico no es válido. Revisalo: por ejemplo, nombre@gmail.com');
+    if (email && DB.todos('usuarios').some(u => u.id !== id && u.email === email)) throw error(`El correo ${email} ya lo usa otro usuario.`);
     const existente = id ? DB.buscar('usuarios', id) : null;
     if (existente && existente.protegido) throw error('El usuario de soporte no se modifica desde acá: se habilita o deshabilita desde «Acceso de soporte».');
     const activo = datos.activo !== false;
@@ -272,7 +280,7 @@ const Logica = {
     }
     if (!existente || datos.clave) Logica._validarClave(datos.clave);
     return DB.transaccion(() => {
-      const fila = { nombre, usuario, rol: datos.rol, activo };
+      const fila = { nombre, usuario, rol: datos.rol, activo, email: email || null };
       if (datos.clave) {
         fila.clave_hash = hashClave(datos.clave, usuario);
         fila.debe_cambiar_clave = id !== Logica.usuarioActualId; // la propia contraseña se cambia desde «Mi cuenta»
@@ -283,9 +291,10 @@ const Logica = {
         if (datos.clave) Logica._auditar('Reseteó una contraseña', `Usuario «${existente.usuario}» (${existente.nombre})`);
         if (existente.rol !== datos.rol) Logica._auditar('Cambió el rol de un usuario', `«${existente.usuario}»: ${ROLES[existente.rol]} → ${ROLES[datos.rol]}`);
         if (existente.activo !== activo) Logica._auditar(activo ? 'Activó un usuario' : 'Desactivó un usuario', `«${existente.usuario}»`);
+        if ((existente.email || null) !== (email || null)) Logica._auditar('Cambió el correo de un usuario', `«${existente.usuario}»: ${existente.email || 'sin correo'} → ${email || 'sin correo'}`);
         return Object.assign(existente, fila);
       }
-      const nuevo = DB.insertar('usuarios', { ...fila, protegido: false, acceso_hasta: null, codigo_recuperacion_hash: null, fecha_alta: Fechas.hoy() });
+      const nuevo = DB.insertar('usuarios', { ...fila, protegido: false, acceso_hasta: null, codigo_recuperacion_hash: null, email_verificado_en: null, fecha_alta: Fechas.hoy() });
       Logica._auditar('Creó un usuario', `«${usuario}» (${nombre}), ${ROLES[datos.rol].toLowerCase()}`);
       return nuevo;
     });
@@ -1426,13 +1435,13 @@ function cargarEjemplo() {
   const dia = n => Fechas.sumarDias(hoy, n);
   const momento = (n, hora) => `${dia(n)}T${hora}`;
 
-  const usuarioBase = { activo: true, protegido: false, acceso_hasta: null, debe_cambiar_clave: false, codigo_recuperacion_hash: null };
+  const usuarioBase = { activo: true, protegido: false, acceso_hasta: null, debe_cambiar_clave: false, codigo_recuperacion_hash: null, email: null, email_verificado_en: null };
   // Código de recuperación del administrador de ejemplo: RECU-PERA-2026 (en la realidad se genera al azar y se imprime)
-  const admin = DB.insertar('usuarios', { ...usuarioBase, nombre: 'Administrador', usuario: 'admin', clave_hash: hashClave('admin123', 'admin'), rol: 'admin', fecha_alta: dia(-60),
+  const admin = DB.insertar('usuarios', { ...usuarioBase, nombre: 'Administrador', usuario: 'admin', clave_hash: hashClave('admin123', 'admin'), rol: 'admin', fecha_alta: dia(-60), email: 'admin@ejemplo.com',
     codigo_recuperacion_hash: hashClave(normalizarCodigo('RECU-PERA-2026'), 'recuperacion:admin') });
   const laura = DB.insertar('usuarios', { ...usuarioBase, nombre: 'Laura', usuario: 'laura', clave_hash: hashClave('laura123', 'laura'), rol: 'vendedor', fecha_alta: dia(-30) });
   // Usuario del desarrollador: protegido (no se borra) y deshabilitado hasta que el administrador lo habilite
-  DB.insertar('usuarios', { ...usuarioBase, nombre: 'Soporte técnico', usuario: 'soporte', clave_hash: hashClave('soporte123', 'soporte'), rol: 'soporte', protegido: true, fecha_alta: dia(-60) });
+  DB.insertar('usuarios', { ...usuarioBase, nombre: 'Soporte técnico', usuario: 'soporte', clave_hash: hashClave('soporte123', 'soporte'), rol: 'soporte', protegido: true, fecha_alta: dia(-60), email: 'soporte@ejemplo.com' });
   Logica.usuarioActualId = admin.id;
 
   // Medios de pago del negocio: cada cuenta y cada posnet es un medio aparte
