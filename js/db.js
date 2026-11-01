@@ -5,9 +5,9 @@
  * por llamadas a la API. Ver docs/modelo.sql para la estructura de cada tabla.
  */
 const DB = {
-  CLAVE: 'sistema-stock-demo-v4',
+  CLAVE: 'sistema-stock-demo-v5',
   TABLAS: [
-    'usuarios',
+    'usuarios', 'auditoria',
     'categorias', 'productos', 'lotes', 'ajustes_stock',
     'clientes', 'pagos_clientes',
     'cajas', 'movimientos_caja',
@@ -29,6 +29,7 @@ const DB = {
       localStorage.removeItem('sistema-stock-demo-v1');
       localStorage.removeItem('sistema-stock-demo-v2');
       localStorage.removeItem('sistema-stock-demo-v3');
+      localStorage.removeItem('sistema-stock-demo-v4');
       const guardado = localStorage.getItem(this.CLAVE);
       this.data = guardado ? JSON.parse(guardado) : null;
     } catch (e) {

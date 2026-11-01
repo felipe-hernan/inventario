@@ -1,5 +1,5 @@
 -- =====================================================================
--- Sistema de stock para almacén: modelo de base de datos (versión 4, con pagos y transferencias)
+-- Sistema de stock para almacén: modelo de base de datos (versión 5, con soporte técnico y auditoría)
 -- Pensado para PostgreSQL. Montos en pesos enteros.
 -- Productos por peso: stock y cantidades en gramos, precios por kilo.
 -- =====================================================================
@@ -8,13 +8,28 @@
 
 -- No hay registro público: los usuarios los crea el administrador.
 CREATE TABLE usuarios (
-  id          SERIAL PRIMARY KEY,
-  nombre      VARCHAR(100) NOT NULL,
-  usuario     VARCHAR(20) NOT NULL UNIQUE,           -- en minúsculas, sin espacios
-  clave_hash  VARCHAR(100) NOT NULL,                 -- en el servidor: bcrypt o Argon2, nunca la contraseña
-  rol         VARCHAR(10) NOT NULL CHECK (rol IN ('admin', 'vendedor')),
-  activo      BOOLEAN NOT NULL DEFAULT TRUE,
-  fecha_alta  DATE NOT NULL DEFAULT CURRENT_DATE
+  id                        SERIAL PRIMARY KEY,
+  nombre                    VARCHAR(100) NOT NULL,
+  usuario                   VARCHAR(20) NOT NULL UNIQUE,      -- en minúsculas, sin espacios
+  clave_hash                VARCHAR(100) NOT NULL,            -- bcrypt o Argon2: nunca la contraseña
+  rol                       VARCHAR(10) NOT NULL CHECK (rol IN ('admin', 'vendedor', 'soporte')),
+  activo                    BOOLEAN NOT NULL DEFAULT TRUE,
+  protegido                 BOOLEAN NOT NULL DEFAULT FALSE,   -- el usuario de soporte: no se puede eliminar
+  acceso_hasta              TIMESTAMP,                        -- soporte: habilitado hasta esta hora (lo define el admin)
+  debe_cambiar_clave        BOOLEAN NOT NULL DEFAULT TRUE,    -- contraseña provisoria: se cambia al ingresar
+  codigo_recuperacion_hash  VARCHAR(100),                     -- admins: código de un solo uso, guardado como hash
+  fecha_alta                DATE NOT NULL DEFAULT CURRENT_DATE
+);
+CREATE UNIQUE INDEX ux_un_solo_soporte ON usuarios(rol) WHERE rol = 'soporte';
+
+-- Quién hizo qué con usuarios y accesos: altas, reseteos, cambios de rol, soporte, recuperaciones.
+CREATE TABLE auditoria (
+  id              SERIAL PRIMARY KEY,
+  fecha_hora      TIMESTAMP NOT NULL DEFAULT NOW(),
+  usuario_id      INT REFERENCES usuarios(id) ON DELETE SET NULL,  -- NULL = comando del servidor
+  usuario_nombre  VARCHAR(100) NOT NULL,                           -- se guarda por si el usuario se elimina
+  accion          VARCHAR(100) NOT NULL,
+  detalle         VARCHAR(300)
 );
 
 -- ---------- Catálogo ----------

@@ -19,6 +19,7 @@ const Sesion = {
     let id = null;
     try { id = Number(localStorage.getItem(Sesion.CLAVE)) || null; } catch (e) { id = Sesion._memoria; }
     const u = id ? DB.buscar('usuarios', id) : null;
+    if (u && u.rol === 'soporte' && !Logica.accesoSoporteVigente(u)) return null; // el acceso temporal venció
     return u && u.activo ? u : null;
   },
   iniciar(u) {
@@ -72,9 +73,17 @@ const UI = {
     Logica.usuarioActualId = UI.usuario ? UI.usuario.id : null;
     document.body.classList.toggle('sin-sesion', !UI.usuario);
     if (!UI.usuario) { App.vistas.login(); return; }
+    // Con contraseña provisoria, lo único que se puede hacer es cambiarla
+    document.body.classList.toggle('sin-sesion', !!UI.usuario.debe_cambiar_clave);
+    if (UI.usuario.debe_cambiar_clave) { App.vistas.cambioClave(); return; }
 
     let v = UI.vistaActual();
-    if (!UI.puedeVer(v)) { v = 'inicio'; history.replaceState(null, '', '#inicio'); }
+    if (!UI.puedeVer(v)) { v = PERMISOS[UI.usuario.rol][0]; history.replaceState(null, '', '#' + v); }
+    // El soporte no ve datos del negocio: sin campana ni estado de caja
+    const esSoporte = UI.usuario.rol === 'soporte';
+    $$('.boton-notif').forEach(b => { b.closest('.dropdown').hidden = esSoporte; });
+    $('#estado-caja').hidden = esSoporte;
+    $('.marca') && ($('.marca').href = '#' + PERMISOS[UI.usuario.rol][0]);
     $$('.menu [data-vista]').forEach(a => {
       a.hidden = !UI.puedeVer(a.dataset.vista);
       a.classList.toggle('active', a.dataset.vista === v);
@@ -190,7 +199,7 @@ const UI = {
       <div class="d-flex align-items-center gap-2 border-top border-secondary-subtle pt-3">
         <button type="button" class="btn btn-link text-reset text-decoration-none d-flex align-items-center gap-2 p-1 flex-grow-1 text-start overflow-hidden" data-accion="mi-cuenta" title="Mi cuenta">
           <span class="avatar" aria-hidden="true">${esc(u.nombre.charAt(0).toUpperCase())}</span>
-          <span class="lh-sm text-truncate"><span class="d-block fw-semibold text-truncate">${esc(u.nombre)}</span><span class="small opacity-75">${ROLES[u.rol]}</span></span>
+          <span class="lh-sm text-truncate"><span class="d-block fw-semibold text-truncate">${esc(u.nombre)}</span><span class="small opacity-75">${ROLES[u.rol]}${u.rol === 'soporte' ? ` hasta las ${Formato.hora(u.acceso_hasta)}` : ''}</span></span>
         </button>
         <button type="button" class="btn btn-sm btn-outline-light text-nowrap" data-accion="sesion-salir"><i class="bi bi-box-arrow-right"></i> Salir</button>
       </div>`;
@@ -202,6 +211,20 @@ const UI = {
     $('#estado-caja').innerHTML = caja
       ? `<a href="#caja" class="estado-caja abierta"><span class="punto"></span>Caja abierta desde las ${Formato.hora(caja.fecha_apertura)}</a>`
       : '<a href="#caja" class="estado-caja cerrada"><span class="punto"></span>Caja cerrada</a>';
+  },
+
+  // Muestra un código de recuperación UNA sola vez, para anotarlo o imprimirlo.
+  mostrarCodigo(codigo, intro) {
+    UI.abrirDialogo({
+      titulo: 'Tu código de recuperación',
+      cuerpo: `<p>${intro}</p>
+        <div class="text-center my-3"><code class="codigo-recuperacion user-select-all">${esc(codigo)}</code></div>
+        <div class="alert alert-warning small mb-0"><i class="bi bi-exclamation-triangle"></i>
+          <strong>Anotalo o imprimilo y guardalo en un lugar seguro.</strong> Es la única vez que se muestra. Sirve una sola vez:
+          si perdés tu contraseña, entrás con «¿Olvidaste tu contraseña?» y el sistema te da uno nuevo.</div>`,
+      pie: `<button type="button" class="btn btn-outline-secondary me-auto" data-accion="imprimir"><i class="bi bi-printer"></i> Imprimir</button>
+        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Ya lo guardé</button>`
+    }, { ancho: 'chico' });
   },
 
   // ---------- Notificaciones (dropdown de Bootstrap) ----------

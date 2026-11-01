@@ -182,3 +182,6 @@ body.sin-sesion main { padding: 0; }
   .modal-content { border: 0; box-shadow: none; }
   .modal-dialog-scrollable .modal-body { overflow: visible; }
 }
+
+/* Código de recuperación: grande y fácil de copiar a mano */
+.codigo-recuperacion { font-size: 1.6rem; letter-spacing: .12em; padding: .5rem 1rem; border: 2px dashed var(--bs-border-color); border-radius: .5rem; color: var(--bs-emphasis-color); }

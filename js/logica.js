@@ -18,14 +18,18 @@ const ESTADOS_VERIFICACION = { pendiente: 'Pendiente', verificada: 'Verificada',
 
 const ROLES = {
   admin: 'Administrador',
-  vendedor: 'Vendedor'
+  vendedor: 'Vendedor',
+  soporte: 'Soporte técnico'   // usuario del desarrollador: protegido, limitado y habilitado por tiempo
 };
 
 // Pantallas que puede abrir cada rol. El administrador ve todo.
 const PERMISOS = {
   admin: ['inicio', 'vender', 'clientes', 'productos', 'mercaderia', 'caja', 'transferencias', 'informes', 'usuarios', 'configuracion'],
-  vendedor: ['inicio', 'vender', 'clientes', 'mercaderia', 'caja', 'transferencias']
+  vendedor: ['inicio', 'vender', 'clientes', 'mercaderia', 'caja', 'transferencias'],
+  soporte: ['usuarios', 'configuracion']   // no ve ventas, caja, clientes ni informes
 };
+
+const HORAS_SOPORTE = 24;
 
 const MOTIVOS_AJUSTE = {
   vencido: 'Vencido',
@@ -105,6 +109,18 @@ function hashClave(clave, usuario) {
   return (h2 >>> 0).toString(16).padStart(8, '0') + (h1 >>> 0).toString(16).padStart(8, '0');
 }
 
+// Código aleatorio legible (sin letras que se confunden, como O/0 o I/1), en grupos de 4.
+function generarCodigo(grupos = 3) {
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const n = grupos * 4;
+  const azar = new Uint32Array(n);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(azar);
+  else for (let i = 0; i < n; i++) azar[i] = Math.floor(Math.random() * 4294967296);
+  const texto = Array.from(azar, x => letras[x % letras.length]).join('');
+  return texto.match(/.{4}/g).join('-');
+}
+const normalizarCodigo = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
 function error(mensaje, codigo) {
   const e = new Error(mensaje);
   if (codigo) e.codigo = codigo;
@@ -130,12 +146,115 @@ const Logica = {
     // Mismo mensaje en los dos casos, para no revelar qué usuarios existen.
     if (!u || u.clave_hash !== hashClave(clave, nombre)) throw error('Usuario o contraseña incorrectos.');
     if (!u.activo) throw error('Este usuario está desactivado. Consultá con el administrador.');
+    if (u.rol === 'soporte' && !Logica.accesoSoporteVigente(u)) {
+      throw error('El acceso de soporte está deshabilitado. El administrador del negocio tiene que habilitarlo desde Usuarios.');
+    }
+    if (u.rol === 'soporte') Logica._auditar('Ingreso de soporte técnico', '', u);
     return u;
+  },
+
+  // ---------- Auditoría: quién hizo qué con usuarios y accesos ----------
+  _auditar(accion, detalle = '', usuario = null) {
+    const u = usuario || DB.buscar('usuarios', Logica.usuarioActualId);
+    DB.insertar('auditoria', {
+      fecha_hora: Fechas.ahora(), usuario_id: u ? u.id : null,
+      usuario_nombre: u ? u.nombre : 'Sistema (servidor)', accion, detalle
+    });
+  },
+  auditoria(limite = 30) {
+    return DB.todos('auditoria').slice().sort((a, b) => b.id - a.id).slice(0, limite);
+  },
+
+  // ---------- Soporte técnico ----------
+  usuarioSoporte() { return DB.todos('usuarios').find(u => u.rol === 'soporte') || null; },
+  accesoSoporteVigente(u = Logica.usuarioSoporte()) {
+    return !!u && !!u.acceso_hasta && u.acceso_hasta > Fechas.ahora();
+  },
+  habilitarSoporte(horas = HORAS_SOPORTE) {
+    if (!Logica.esAdminActual()) throw error('Solo el administrador puede habilitar el acceso de soporte.');
+    const u = Logica.usuarioSoporte();
+    if (!u) throw error('No hay usuario de soporte.');
+    const hasta = new Date(Date.now() + horas * 3600000);
+    const iso = `${Fechas.iso(hasta)}T${String(hasta.getHours()).padStart(2, '0')}:${String(hasta.getMinutes()).padStart(2, '0')}`;
+    return DB.transaccion(() => {
+      u.acceso_hasta = iso;
+      Logica._auditar('Habilitó el acceso de soporte', `Hasta el ${Formato.fecha(iso)} a las ${Formato.hora(iso)}`);
+      return u;
+    });
+  },
+  deshabilitarSoporte() {
+    if (!Logica.esAdminActual()) throw error('Solo el administrador puede deshabilitar el acceso de soporte.');
+    const u = Logica.usuarioSoporte();
+    return DB.transaccion(() => { u.acceso_hasta = null; Logica._auditar('Deshabilitó el acceso de soporte'); return u; });
+  },
+  // Pueden crear usuarios y resetear contraseñas el administrador y el soporte (con acceso vigente).
+  puedeGestionarUsuarios() {
+    const u = DB.buscar('usuarios', Logica.usuarioActualId);
+    return !!u && (u.rol === 'admin' || (u.rol === 'soporte' && Logica.accesoSoporteVigente(u)));
+  },
+
+  // ---------- Contraseñas ----------
+  // Al ingresar con una contraseña provisoria hay que cambiarla. Si es administrador y no tiene
+  // código de recuperación, se le genera uno y se devuelve para mostrarlo una sola vez.
+  cambiarClaveObligatoria(nueva) {
+    const u = DB.buscar('usuarios', Logica.usuarioActualId);
+    Logica._validarClave(nueva);
+    if (u.clave_hash === hashClave(nueva, u.usuario)) throw error('La contraseña nueva tiene que ser distinta de la provisoria.');
+    return DB.transaccion(() => {
+      u.clave_hash = hashClave(nueva, u.usuario);
+      u.debe_cambiar_clave = false;
+      Logica._auditar('Cambió su contraseña provisoria');
+      const codigo = u.rol === 'admin' && !u.codigo_recuperacion_hash ? Logica._nuevoCodigo(u) : null;
+      return { usuario: u, codigo };
+    });
+  },
+  _nuevoCodigo(u) {
+    const codigo = generarCodigo();
+    u.codigo_recuperacion_hash = hashClave(normalizarCodigo(codigo), 'recuperacion:' + u.usuario);
+    return codigo;
+  },
+  // El administrador genera un código nuevo (el anterior deja de servir).
+  generarCodigoRecuperacion() {
+    const u = DB.buscar('usuarios', Logica.usuarioActualId);
+    if (!u || u.rol !== 'admin') throw error('El código de recuperación es solo para administradores.');
+    return DB.transaccion(() => { const c = Logica._nuevoCodigo(u); Logica._auditar('Generó un código de recuperación nuevo'); return c; });
+  },
+  // «¿Olvidaste tu contraseña?»: el administrador usa su código guardado. Se gasta y se genera otro.
+  recuperarConCodigo(usuario, codigo, nueva) {
+    const nombre = normalizar(usuario);
+    const u = DB.todos('usuarios').find(x => x.usuario === nombre);
+    const valido = u && u.activo && u.rol === 'admin' && u.codigo_recuperacion_hash &&
+      u.codigo_recuperacion_hash === hashClave(normalizarCodigo(codigo), 'recuperacion:' + nombre);
+    if (!valido) throw error('El usuario o el código de recuperación no son correctos.');
+    Logica._validarClave(nueva);
+    return DB.transaccion(() => {
+      u.clave_hash = hashClave(nueva, u.usuario);
+      u.debe_cambiar_clave = false;
+      const nuevoCodigo = Logica._nuevoCodigo(u);
+      Logica._auditar('Recuperó su contraseña con el código de recuperación', '', u);
+      return { usuario: u, codigo: nuevoCodigo };
+    });
+  },
+  // Simula el comando de emergencia del servidor (en la versión real: dotnet AlmacenApp.dll reset-admin).
+  // No pide permisos porque solo lo puede ejecutar quien tiene acceso al servidor.
+  resetEmergencia(usuario, provisoria) {
+    const u = DB.todos('usuarios').find(x => x.usuario === normalizar(usuario));
+    if (!u) throw error('No existe ese usuario.');
+    Logica._validarClave(provisoria);
+    return DB.transaccion(() => {
+      Object.assign(u, { clave_hash: hashClave(provisoria, u.usuario), debe_cambiar_clave: true, activo: true });
+      DB.insertar('auditoria', { fecha_hora: Fechas.ahora(), usuario_id: null, usuario_nombre: 'Sistema (servidor)',
+        accion: 'Reseteo de emergencia de contraseña', detalle: `Usuario «${u.usuario}». Hecho desde el servidor.` });
+      return `Contraseña provisoria cargada para «${u.usuario}». Tiene que cambiarla al ingresar.`;
+    });
   },
   _validarClave(clave) {
     if (String(clave || '').length < 6) throw error('La contraseña tiene que tener al menos 6 caracteres.');
   },
+  // datos.clave, si viene, es una contraseña PROVISORIA: la persona la cambia al ingresar.
   guardarUsuario(datos, id = null) {
+    if (!Logica.puedeGestionarUsuarios()) throw error('No tenés permiso para administrar usuarios.');
+    if (datos.rol === 'soporte') throw error('El usuario de soporte es único y ya existe.');
     const nombre = (datos.nombre || '').trim();
     const usuario = normalizar(datos.usuario);
     if (!nombre) throw error('Ingresá el nombre de la persona.');
@@ -143,6 +262,7 @@ const Logica = {
     if (!ROLES[datos.rol]) throw error('Elegí el rol.');
     if (DB.todos('usuarios').some(u => u.id !== id && u.usuario === usuario)) throw error(`Ya existe el usuario «${usuario}».`);
     const existente = id ? DB.buscar('usuarios', id) : null;
+    if (existente && existente.protegido) throw error('El usuario de soporte no se modifica desde acá: se habilita o deshabilita desde «Acceso de soporte».');
     const activo = datos.activo !== false;
     if (existente) {
       const quedaSinAdmin = existente.rol === 'admin' && (datos.rol !== 'admin' || !activo) &&
@@ -153,12 +273,21 @@ const Logica = {
     if (!existente || datos.clave) Logica._validarClave(datos.clave);
     return DB.transaccion(() => {
       const fila = { nombre, usuario, rol: datos.rol, activo };
-      if (datos.clave) fila.clave_hash = hashClave(datos.clave, usuario);
-      else if (existente && existente.usuario !== usuario) {
-        throw error('Si cambiás el nombre de usuario, cargá también una contraseña nueva.');
+      if (datos.clave) {
+        fila.clave_hash = hashClave(datos.clave, usuario);
+        fila.debe_cambiar_clave = id !== Logica.usuarioActualId; // la propia contraseña se cambia desde «Mi cuenta»
+      } else if (existente && existente.usuario !== usuario) {
+        throw error('Si cambiás el nombre de usuario, cargá también una contraseña provisoria.');
       }
-      if (existente) return Object.assign(existente, fila);
-      return DB.insertar('usuarios', { ...fila, fecha_alta: Fechas.hoy() });
+      if (existente) {
+        if (datos.clave) Logica._auditar('Reseteó una contraseña', `Usuario «${existente.usuario}» (${existente.nombre})`);
+        if (existente.rol !== datos.rol) Logica._auditar('Cambió el rol de un usuario', `«${existente.usuario}»: ${ROLES[existente.rol]} → ${ROLES[datos.rol]}`);
+        if (existente.activo !== activo) Logica._auditar(activo ? 'Activó un usuario' : 'Desactivó un usuario', `«${existente.usuario}»`);
+        return Object.assign(existente, fila);
+      }
+      const nuevo = DB.insertar('usuarios', { ...fila, protegido: false, acceso_hasta: null, codigo_recuperacion_hash: null, fecha_alta: Fechas.hoy() });
+      Logica._auditar('Creó un usuario', `«${usuario}» (${nombre}), ${ROLES[datos.rol].toLowerCase()}`);
+      return nuevo;
     });
   },
   // Cuántas operaciones registró un usuario: si tiene alguna, no se borra (se desactiva).
@@ -173,6 +302,7 @@ const Logica = {
   motivoNoBorrarUsuario(id) {
     const u = DB.buscar('usuarios', id);
     if (!u) return 'el usuario no existe';
+    if (u.protegido) return 'es el usuario de soporte técnico, que está protegido';
     if (id === Logica.usuarioActualId) return 'es tu propio usuario';
     // Nunca puede quedar el sistema sin un administrador activo: nadie podría crear usuarios ni configurar
     if (u.rol === 'admin' && !DB.todos('usuarios').some(x => x.id !== id && x.rol === 'admin' && x.activo)) {
@@ -186,14 +316,15 @@ const Logica = {
     if (!Logica.esAdminActual()) throw error('Solo el administrador puede eliminar usuarios.');
     const motivo = Logica.motivoNoBorrarUsuario(id);
     if (motivo) throw error(`No se puede eliminar porque ${motivo}. Podés desactivarlo.`);
-    return DB.transaccion(() => DB.borrar('usuarios', id));
+    const u = DB.buscar('usuarios', id);
+    return DB.transaccion(() => { DB.borrar('usuarios', id); Logica._auditar('Eliminó un usuario', `«${u.usuario}» (${u.nombre})`); });
   },
 
   cambiarClavePropia(actual, nueva) {
     const u = DB.buscar('usuarios', Logica.usuarioActualId);
     if (!u || u.clave_hash !== hashClave(actual, u.usuario)) throw error('La contraseña actual no es correcta.');
     Logica._validarClave(nueva);
-    return DB.transaccion(() => { u.clave_hash = hashClave(nueva, u.usuario); return u; });
+    return DB.transaccion(() => { u.clave_hash = hashClave(nueva, u.usuario); Logica._auditar('Cambió su contraseña'); return u; });
   },
 
   // ---------- Precios ----------
@@ -1295,8 +1426,13 @@ function cargarEjemplo() {
   const dia = n => Fechas.sumarDias(hoy, n);
   const momento = (n, hora) => `${dia(n)}T${hora}`;
 
-  const admin = DB.insertar('usuarios', { nombre: 'Administrador', usuario: 'admin', clave_hash: hashClave('admin123', 'admin'), rol: 'admin', activo: true, fecha_alta: dia(-60) });
-  const laura = DB.insertar('usuarios', { nombre: 'Laura', usuario: 'laura', clave_hash: hashClave('laura123', 'laura'), rol: 'vendedor', activo: true, fecha_alta: dia(-30) });
+  const usuarioBase = { activo: true, protegido: false, acceso_hasta: null, debe_cambiar_clave: false, codigo_recuperacion_hash: null };
+  // Código de recuperación del administrador de ejemplo: RECU-PERA-2026 (en la realidad se genera al azar y se imprime)
+  const admin = DB.insertar('usuarios', { ...usuarioBase, nombre: 'Administrador', usuario: 'admin', clave_hash: hashClave('admin123', 'admin'), rol: 'admin', fecha_alta: dia(-60),
+    codigo_recuperacion_hash: hashClave(normalizarCodigo('RECU-PERA-2026'), 'recuperacion:admin') });
+  const laura = DB.insertar('usuarios', { ...usuarioBase, nombre: 'Laura', usuario: 'laura', clave_hash: hashClave('laura123', 'laura'), rol: 'vendedor', fecha_alta: dia(-30) });
+  // Usuario del desarrollador: protegido (no se borra) y deshabilitado hasta que el administrador lo habilite
+  DB.insertar('usuarios', { ...usuarioBase, nombre: 'Soporte técnico', usuario: 'soporte', clave_hash: hashClave('soporte123', 'soporte'), rol: 'soporte', protegido: true, fecha_alta: dia(-60) });
   Logica.usuarioActualId = admin.id;
 
   // Medios de pago del negocio: cada cuenta y cada posnet es un medio aparte

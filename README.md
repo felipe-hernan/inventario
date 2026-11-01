@@ -2,7 +2,7 @@
 
 Es la misma demo del sistema (ventas, caja, fiado, stock con vencimientos, informes, usuarios), con toda la parte visual hecha con **Bootstrap 5.3** y **Bootstrap Icons**. Sirve para comparar con la versión de CSS propio antes de elegir el estilo de la versión definitiva en ASP.NET MVC.
 
-Usuarios de prueba: `admin` / `admin123` y `laura` / `laura123`.
+Usuarios de prueba: `admin` / `admin123`, `laura` / `laura123` y `soporte` / `soporte123` (este último, solo si el administrador lo habilita).
 
 ## Qué cambia y qué no
 

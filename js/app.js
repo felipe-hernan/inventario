@@ -87,6 +87,7 @@
     if (v === 'configuracion') return App.probarLector(codigo);
     if (v === 'productos' && UI.esAdmin()) return App.escanearEnProductos(codigo);
     if (v === 'mercaderia') return App.escanearEnMercaderia(codigo);
+    if (!UI.puedeVer('vender')) return;
     if (v !== 'vender') {
       if (!Logica.cajaAbierta()) { UI.avisar('Abrí la caja para empezar a vender.'); return; }
       // Primero se cambia de pantalla y después se agrega, así se ve el aviso de lo escaneado
