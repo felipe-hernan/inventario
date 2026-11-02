@@ -12,6 +12,19 @@
     UI.vista().innerHTML = `
       ${H.tituloPagina('Configuración')}
       <div class="row g-4">
+        <div class="col-12">
+          <section class="card shadow-sm"><div class="card-body d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+              <h2 class="h5 mb-1"><i class="bi bi-palette"></i> Apariencia</h2>
+              <div class="small text-body-secondary">Se guarda en este navegador: cada computadora o celular puede tener el suyo.</div>
+            </div>
+            <div class="btn-group" role="group" aria-label="Tema">
+              ${[['claro', 'sun', 'Claro'], ['oscuro', 'moon-stars', 'Oscuro'], ['auto', 'circle-half', 'Automático']].map(([v, i, t]) => `
+                <input type="radio" class="btn-check" name="tema" id="tema-${v}" value="${v}" ${Tema.actual() === v ? 'checked' : ''} data-cambio="cfg-tema">
+                <label class="btn btn-outline-primary" for="tema-${v}"><i class="bi bi-${i}"></i> ${t}</label>`).join('')}
+            </div>
+          </div></section>
+        </div>
         <div class="col-xl-6">
           <section class="card shadow-sm h-100"><div class="card-body">
             <h2 class="h5"><i class="bi bi-wallet2"></i> Medios de pago</h2>
@@ -187,6 +200,11 @@
     const f = form.elements;
     guardar('ticket', { ancho: Number(f.ancho.value), alVender: f.alVender.value, copias: Number(f.copias.value) }, 'cfg-ticket-error', 'Impresora configurada');
   };
+  App.cambios['cfg-tema'] = el => {
+    Tema.elegir(el.value);
+    UI.avisar({ claro: 'Tema claro', oscuro: 'Tema oscuro', auto: 'Tema automático: sigue al sistema' }[el.value]);
+  };
+
   App.envios['cfg-transferencias'] = form => {
     const f = form.elements;
     guardar('transferencias', { modo: f.modo.value, vendedorVerifica: f.vendedorVerifica.checked, minutosAviso: Number(f.minutosAviso.value) }, 'cfg-transf-error', 'Reglas de transferencias guardadas');

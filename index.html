@@ -6,17 +6,28 @@
   <title>Stock del almacén (demo Bootstrap)</title>
   <meta name="description" content="Demo de un sistema para almacén hecha con Bootstrap 5: ventas, caja, fiado, stock con vencimientos e informes.">
   <script>
-    // Modo claro u oscuro según la configuración del sistema (color modes de Bootstrap 5.3)
+    // Tema claro, oscuro o automático (según el sistema). Se elige en Configuración y se guarda en este navegador.
+    // Va en el <head> para aplicar el tema antes de dibujar la página y que no parpadee.
     (function () {
+      const CLAVE = 'sistema-stock-tema';
       const m = window.matchMedia('(prefers-color-scheme: dark)');
-      const aplicar = () => document.documentElement.setAttribute('data-bs-theme', m.matches ? 'dark' : 'light');
+      const leer = () => { try { return localStorage.getItem(CLAVE) || 'auto'; } catch (e) { return 'auto'; } };
+      const aplicar = () => {
+        const pref = leer();
+        const oscuro = pref === 'oscuro' || (pref === 'auto' && m.matches);
+        document.documentElement.setAttribute('data-bs-theme', oscuro ? 'dark' : 'light');
+      };
+      window.Tema = {
+        actual: leer,
+        elegir(pref) { try { localStorage.setItem(CLAVE, pref); } catch (e) { /* sin localStorage */ } aplicar(); }
+      };
       aplicar();
-      m.addEventListener('change', aplicar);
+      m.addEventListener('change', aplicar); // solo cambia algo si está en automático
     })();
   </script>
-  <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css?v=8">
-  <link rel="stylesheet" href="lib/bootstrap-icons/font/bootstrap-icons.min.css?v=8">
-  <link rel="stylesheet" href="css/tema.css?v=8">
+  <link rel="stylesheet" href="lib/bootstrap/dist/css/bootstrap.min.css?v=9">
+  <link rel="stylesheet" href="lib/bootstrap-icons/font/bootstrap-icons.min.css?v=9">
+  <link rel="stylesheet" href="css/tema.css?v=9">
 </head>
 <body>
   <div class="app">
@@ -102,22 +113,22 @@
     </div>
   </div>
 
-  <script src="lib/bootstrap/dist/js/bootstrap.bundle.min.js?v=8"></script>
-  <script src="js/db.js?v=8"></script>
-  <script src="js/logica.js?v=8"></script>
-  <script src="js/ui.js?v=8"></script>
-  <script src="js/hardware.js?v=8"></script>
-  <script src="js/vistas/login.js?v=8"></script>
-  <script src="js/vistas/usuarios.js?v=8"></script>
-  <script src="js/vistas/inicio.js?v=8"></script>
-  <script src="js/vistas/vender.js?v=8"></script>
-  <script src="js/vistas/clientes.js?v=8"></script>
-  <script src="js/vistas/productos.js?v=8"></script>
-  <script src="js/vistas/mercaderia.js?v=8"></script>
-  <script src="js/vistas/caja.js?v=8"></script>
-  <script src="js/vistas/transferencias.js?v=8"></script>
-  <script src="js/vistas/informes.js?v=8"></script>
-  <script src="js/vistas/configuracion.js?v=8"></script>
-  <script src="js/app.js?v=8"></script>
+  <script src="lib/bootstrap/dist/js/bootstrap.bundle.min.js?v=9"></script>
+  <script src="js/db.js?v=9"></script>
+  <script src="js/logica.js?v=9"></script>
+  <script src="js/ui.js?v=9"></script>
+  <script src="js/hardware.js?v=9"></script>
+  <script src="js/vistas/login.js?v=9"></script>
+  <script src="js/vistas/usuarios.js?v=9"></script>
+  <script src="js/vistas/inicio.js?v=9"></script>
+  <script src="js/vistas/vender.js?v=9"></script>
+  <script src="js/vistas/clientes.js?v=9"></script>
+  <script src="js/vistas/productos.js?v=9"></script>
+  <script src="js/vistas/mercaderia.js?v=9"></script>
+  <script src="js/vistas/caja.js?v=9"></script>
+  <script src="js/vistas/transferencias.js?v=9"></script>
+  <script src="js/vistas/informes.js?v=9"></script>
+  <script src="js/vistas/configuracion.js?v=9"></script>
+  <script src="js/app.js?v=9"></script>
 </body>
 </html>
